@@ -5,574 +5,800 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AHA/ASA 2026 急诊卒中 AI 决策引擎</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/feather-icons"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        /* 自定义一些小样式 */
-        body { background-color: #020617; color: #e2e8f0; font-family: ui-sans-serif, system-ui, sans-serif; }
-        .hide-scroll::-webkit-scrollbar { display: none; }
-        input[type="range"] { accent-color: #06b6d4; }
-        .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-        .region-path { transition: all 0.3s ease; stroke: #0f172a; stroke-width: 0.5; cursor: pointer; }
-        .region-path:hover { opacity: 0.8; }
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: currentColor; cursor: pointer; margin-top: -6px; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #1e293b; border-radius: 2px; }
+        input[type=range]:focus { outline: none; }
+        /* 隐藏 input number 的上下箭头 */
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+        .blur-sm { filter: blur(4px); pointer-events: none; user-select: none; }
     </style>
 </head>
-<body class="min-h-screen selection:bg-cyan-900 p-4 md:p-8">
+<body class="min-h-screen bg-slate-950 text-slate-200 p-4 md:p-8 font-sans selection:bg-cyan-900">
 
-<div id="app-container" class="max-w-7xl mx-auto">
-    <header class="mb-6 border-b border-slate-800 pb-4 flex items-center justify-between">
+    <!-- 头部 -->
+    <header class="mb-6 border-b border-slate-800 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
             <h1 class="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500 flex items-center gap-3">
-                <i data-feather="cpu" class="w-8 h-8 text-cyan-400"></i>
+                <i data-lucide="brain" class="w-8 h-8 text-cyan-400"></i>
                 AHA/ASA 2026 急诊卒中 AI 决策引擎
             </h1>
         </div>
-        <div class="hidden md:flex items-center gap-2 text-xs text-amber-500 bg-amber-500/10 px-3 py-1.5 rounded-full border border-amber-500/20">
-            <i data-feather="clock" class="w-4 h-4"></i>
-            Time is Brain — 目标 DNT &lt; 45 mins
+        <div class="flex items-center gap-3 flex-wrap">
+            <div class="hidden md:flex items-center gap-2 text-xs text-amber-500 bg-amber-500/10 px-3 py-1.5 rounded-full border border-amber-500/20">
+                <i data-lucide="shield-check" class="w-4 h-4"></i>
+                多重医疗安全锁防护
+            </div>
+            <!-- 【终极痛点解决】：一键生成并复制交班报告 -->
+            <button onclick="copyHandoverReport()" class="flex items-center gap-2 text-sm text-emerald-100 bg-emerald-600 hover:bg-emerald-500 transition-colors px-4 py-2 rounded-lg font-semibold shadow-lg shadow-emerald-500/20">
+                <i data-lucide="clipboard-copy" class="w-4 h-4"></i>
+                <span id="btn-copy-text">复制交班</span>
+            </button>
+            <!-- 一键评估新患者按钮 -->
+            <button onclick="resetAll()" class="flex items-center gap-2 text-sm text-slate-100 bg-indigo-600 hover:bg-indigo-500 transition-colors px-4 py-2 rounded-lg font-semibold shadow-lg shadow-indigo-500/20">
+                <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                新患者
+            </button>
         </div>
     </header>
 
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        <div class="lg:col-span-5 flex flex-col gap-4">
+        <!-- === 右侧：处方决策清单与 ASPECTS 评估 (7/12) === -->
+        <div class="lg:col-span-7 flex flex-col gap-5 order-1 lg:order-2 lg:sticky lg:top-4 lg:self-start z-20">
+            
+            <section class="bg-gradient-to-br from-slate-900 to-slate-950 rounded-2xl p-5 border border-slate-700 shadow-xl relative overflow-hidden flex-shrink-0">
+                <div class="absolute right-0 top-0 w-64 h-64 bg-cyan-500/5 blur-[100px] rounded-full pointer-events-none"></div>
+                <div class="flex justify-between items-center mb-5 relative z-10">
+                    <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-100">
+                        <i data-lucide="stethoscope" class="w-5 h-5 text-emerald-400"></i> AI 行动清单 (Action Plan)
+                    </h2>
+                    <div class="flex gap-1 bg-slate-900 p-1 rounded-md border border-slate-700 overflow-x-auto">
+                        <button id="btn-evt-pre" onclick="setState('evtStatus', 'pre')" class="px-2 py-1 text-[10px] md:text-xs rounded bg-slate-700 text-cyan-400 whitespace-nowrap">抢救</button>
+                        <button id="btn-evt-post-ivt" onclick="setState('evtStatus', 'post-ivt')" class="px-2 py-1 text-[10px] md:text-xs rounded text-slate-500 whitespace-nowrap">已溶栓(24h)</button>
+                        <button id="btn-evt-post-success" onclick="setState('evtStatus', 'post-success')" class="px-2 py-1 text-[10px] md:text-xs rounded text-slate-500 whitespace-nowrap">取栓再通</button>
+                        <button id="btn-evt-post-fail" onclick="setState('evtStatus', 'post-fail')" class="px-2 py-1 text-[10px] md:text-xs rounded text-slate-500 whitespace-nowrap">未通/失败</button>
+                    </div>
+                </div>
+                
+                <div id="action-plan-container" class="space-y-3 relative z-10">
+                    <!-- 动态注入的内容 -->
+                </div>
+            </section>
+
+            <!-- 动态隐藏的 ASPECTS 脑图 -->
+            <section id="aspects-section" class="hidden bg-slate-900 rounded-2xl p-5 border border-slate-800 shadow-xl flex-grow flex flex-col transition-all">
+                <div class="flex justify-between items-start mb-4">
+                    <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-100">
+                        <i data-lucide="brain" class="w-4 h-4 text-purple-400"></i> ASPECTS 前循环脑图
+                    </h2>
+                    <div class="text-right">
+                        <div class="text-[10px] text-slate-400 uppercase tracking-widest mb-0.5">Score</div>
+                        <div class="text-3xl font-bold font-mono leading-none">
+                            <span id="aspects-score" class="text-emerald-400">10</span>
+                            <span class="text-lg text-slate-600">/10</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="relative flex-grow min-h-[220px] flex flex-col md:flex-row items-center justify-center gap-6 md:gap-12 bg-slate-950/50 rounded-xl border border-slate-800/50 p-4">
+                    <!-- 基底节层面 -->
+                    <div class="relative w-36 h-44">
+                        <h3 class="absolute -top-5 w-full text-center text-[10px] text-slate-500 uppercase">基底节平面</h3>
+                        <svg viewBox="0 0 100 120" class="w-full h-full drop-shadow-2xl">
+                            <ellipse cx="50" cy="60" rx="48" ry="58" fill="#0f172a" stroke="#1e293b" stroke-width="1" />
+                            <path id="path-M1" onclick="toggleAspect('M1')" d="M 5,60 C 5,20 40,5 50,5 L 50,30 L 20,60 Z" class="cursor-pointer transition-colors duration-300 hover:opacity-80 stroke-slate-900 stroke-[0.5] fill-cyan-500/20" />
+                            <text x="25" y="35" class="text-[6px] fill-slate-300 pointer-events-none font-mono">M1</text>
+                            <path id="path-M2" onclick="toggleAspect('M2')" d="M 5,60 L 20,60 L 20,80 L 10,100 C 5,80 5,60 5,60 Z" class="cursor-pointer transition-colors duration-300 hover:opacity-80 stroke-slate-900 stroke-[0.5] fill-cyan-600/20" />
+                            <text x="12" y="75" class="text-[6px] fill-slate-300 pointer-events-none font-mono">M2</text>
+                            <path id="path-M3" onclick="toggleAspect('M3')" d="M 10,100 L 20,80 L 50,85 L 50,118 C 30,115 15,110 10,100 Z" class="cursor-pointer transition-colors duration-300 hover:opacity-80 stroke-slate-900 stroke-[0.5] fill-cyan-700/20" />
+                            <text x="30" y="102" class="text-[6px] fill-slate-300 pointer-events-none font-mono">M3</text>
+                            <path id="path-I" onclick="toggleAspect('I')" d="M 22,50 L 30,50 L 28,75 L 22,75 Z" class="cursor-pointer transition-colors duration-300 hover:opacity-80 stroke-slate-900 stroke-[0.5] fill-blue-400/30" />
+                            <text x="24" y="65" class="text-[5px] fill-slate-200 pointer-events-none font-mono">I</text>
+                            <path id="path-L" onclick="toggleAspect('L')" d="M 32,55 L 42,55 L 40,75 L 32,70 Z" class="cursor-pointer transition-colors duration-300 hover:opacity-80 stroke-slate-900 stroke-[0.5] fill-indigo-400/30" />
+                            <text x="35" y="65" class="text-[5px] fill-slate-200 pointer-events-none font-mono">L</text>
+                            <path id="path-IC" onclick="toggleAspect('IC')" d="M 44,50 L 48,50 L 45,70 L 42,70 Z" class="cursor-pointer transition-colors duration-300 hover:opacity-80 stroke-slate-900 stroke-[0.5] fill-purple-400/30" />
+                            <text x="44" y="62" class="text-[4px] fill-slate-200 pointer-events-none font-mono">IC</text>
+                            <path id="path-C" onclick="toggleAspect('C')" d="M 35,35 L 48,35 L 48,45 L 35,45 Z" class="cursor-pointer transition-colors duration-300 hover:opacity-80 stroke-slate-900 stroke-[0.5] fill-violet-400/30" />
+                            <text x="40" y="42" class="text-[5px] fill-slate-200 pointer-events-none font-mono">C</text>
+                            <path d="M 50,5 L 50,118 L 95,60 Z" fill="#1e293b" opacity="0.3" />
+                            <line x1="50" y1="0" x2="50" y2="120" stroke="#334155" stroke-width="1" stroke-dasharray="2,2" />
+                        </svg>
+                    </div>
+
+                    <!-- 放射冠层面 -->
+                    <div class="relative w-28 h-36">
+                        <h3 class="absolute -top-5 w-full text-center text-[10px] text-slate-500 uppercase">放射冠平面</h3>
+                        <svg viewBox="0 0 100 120" class="w-full h-full drop-shadow-2xl">
+                            <ellipse cx="50" cy="60" rx="42" ry="52" fill="#0f172a" stroke="#1e293b" stroke-width="1" />
+                            <path id="path-M4" onclick="toggleAspect('M4')" d="M 12,50 C 12,25 35,10 50,8 L 50,50 Z" class="cursor-pointer transition-colors duration-300 hover:opacity-80 stroke-slate-900 stroke-[0.5] fill-cyan-400/20" />
+                            <text x="30" y="35" class="text-[6px] fill-slate-300 pointer-events-none font-mono">M4</text>
+                            <path id="path-M5" onclick="toggleAspect('M5')" d="M 12,50 L 50,50 L 50,70 L 10,75 C 10,65 12,50 12,50 Z" class="cursor-pointer transition-colors duration-300 hover:opacity-80 stroke-slate-900 stroke-[0.5] fill-cyan-500/20" />
+                            <text x="25" y="65" class="text-[6px] fill-slate-300 pointer-events-none font-mono">M5</text>
+                            <path id="path-M6" onclick="toggleAspect('M6')" d="M 10,75 L 50,70 L 50,110 C 30,105 15,95 10,75 Z" class="cursor-pointer transition-colors duration-300 hover:opacity-80 stroke-slate-900 stroke-[0.5] fill-cyan-600/20" />
+                            <text x="30" y="95" class="text-[6px] fill-slate-300 pointer-events-none font-mono">M6</text>
+                            <path d="M 50,8 L 50,110 L 88,50 Z" fill="#1e293b" opacity="0.3" />
+                            <line x1="50" y1="0" x2="50" y2="120" stroke="#334155" stroke-width="1" stroke-dasharray="2,2" />
+                        </svg>
+                    </div>
+                </div>
+                
+                <div class="mt-3 flex justify-end">
+                    <button onclick="resetAspects()" class="text-[10px] text-slate-500 hover:text-cyan-400 transition-colors">
+                        [ ↺ 重置满分 ]
+                    </button>
+                </div>
+            </section>
+        </div>
+
+        <!-- === 左侧：综合数据录入舱 (5/12) === -->
+        <div class="lg:col-span-5 flex flex-col gap-4 order-2 lg:order-1 z-10">
             <section class="bg-slate-900 rounded-2xl p-5 border border-slate-800 shadow-xl relative overflow-hidden flex-grow">
                 <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-cyan-500"></div>
                 
                 <h2 class="text-lg font-semibold mb-4 flex items-center gap-2 text-slate-100">
-                    <i data-feather="check-square" class="w-5 h-5 text-indigo-400"></i>
+                    <i data-lucide="list-checks" class="w-5 h-5 text-indigo-400"></i>
                     急诊数据录入舱 (ER Assessment)
                 </h2>
                 
-                <div class="bg-slate-950/50 p-4 rounded-xl border border-slate-800 mb-5">
+                <!-- 时间与影像确认模块 -->
+                <div class="bg-slate-950/50 p-4 rounded-xl border border-slate-800 mb-5 relative">
                     <div class="flex justify-between items-center mb-3">
+                        <!-- 【避险优化】：修改语义为 LKW -->
                         <label class="text-sm text-slate-300 flex items-center gap-2">
-                            <i data-feather="clock" class="w-4 h-4 text-cyan-500"></i> 发病至评估时间
+                            <i data-lucide="clock" class="w-4 h-4 text-cyan-500"></i> 最后正常时间 (LKW)
                         </label>
                         <button id="btn-wakeup" class="flex items-center gap-1.5 px-3 py-1 text-xs rounded-full transition-all border bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200">
-                            <i data-feather="moon" class="w-3.5 h-3.5"></i> 醒后/时间不明
+                            <i data-lucide="moon" class="w-3.5 h-3.5"></i> 醒后/不明
                         </button>
                     </div>
                     
                     <div id="time-slider-container">
                         <div class="flex justify-end mb-1">
-                            <span class="text-2xl font-bold text-cyan-400 font-mono tracking-tighter"><span id="val-time">2.5</span> <span class="text-sm text-slate-500">h</span></span>
+                            <span class="text-2xl font-bold text-cyan-400 font-mono tracking-tighter">
+                                <span id="val-time">2.5</span> <span class="text-sm text-slate-500">h</span>
+                            </span>
                         </div>
-                        <input type="range" id="input-time" min="0" max="24" step="0.5" value="2.5" class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer">
+                        <input type="range" id="input-time" min="0" max="24" step="0.5" value="2.5" class="w-full text-cyan-500" />
+                        
+                        <div class="flex justify-between gap-1.5 mt-4">
+                            <button onclick="setState('timeOnset', 2)" class="flex-1 py-1 text-[10px] rounded border border-slate-700 bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-cyan-400 hover:border-cyan-800 transition-colors">&lt; 3h</button>
+                            <button onclick="setState('timeOnset', 4)" class="flex-1 py-1 text-[10px] rounded border border-slate-700 bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-cyan-400 hover:border-cyan-800 transition-colors">3-4.5h</button>
+                            <button onclick="setState('timeOnset', 5)" class="flex-1 py-1 text-[10px] rounded border border-slate-700 bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-cyan-400 hover:border-cyan-800 transition-colors">4.5-6h</button>
+                            <button onclick="setState('timeOnset', 10)" class="flex-1 py-1 text-[10px] rounded border border-slate-700 bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-cyan-400 hover:border-cyan-800 transition-colors">&gt; 6h</button>
+                        </div>
                     </div>
-                    <div id="time-wakeup-msg" class="hidden text-center py-2 text-sm text-indigo-300/80 italic">
-                        系统已切换至“基于影像组织窗 (Tissue-based)” 决策模式
+                    <div id="wakeup-msg" class="hidden text-center py-2 text-sm text-indigo-300/80 italic border-b border-indigo-900/30 mb-2">
+                        已切换至基于组织窗 (Tissue-based) 模式
+                    </div>
+
+                    <!-- 影像学熔断确认框 -->
+                    <div id="imaging-lock-container" class="hidden mt-3 p-2.5 bg-indigo-900/20 border border-indigo-500/30 rounded-lg">
+                        <label class="flex items-start gap-2 cursor-pointer">
+                            <input type="checkbox" id="check-imaging-match" class="mt-1 w-4 h-4 accent-indigo-500 cursor-pointer">
+                            <span class="text-xs text-indigo-200 leading-relaxed">
+                                <strong>解除处方熔断：</strong>已证实高级影像学存在可挽救半暗带。
+                            </span>
+                        </label>
                     </div>
                 </div>
 
+                <!-- 神经功能评分 -->
+                <!-- 【UX优化】：废弃滑块，改为步进器 (Stepper) 确保极端精准 -->
                 <div class="grid grid-cols-2 gap-4 mb-5">
                     <div class="bg-slate-950/50 p-3 rounded-xl border border-slate-800">
-                        <div class="flex justify-between items-end mb-2">
-                            <label class="text-xs text-slate-400">NIHSS (缺损)</label>
-                            <span id="val-nihss" class="text-lg font-bold text-indigo-400 font-mono">12</span>
+                        <div class="text-xs text-slate-400 mb-2 text-center">NIHSS (缺损程度)</div>
+                        <div class="flex items-center justify-between bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
+                            <button onclick="adjustScore('nihss', -1)" class="w-10 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors border-r border-slate-700">-</button>
+                            <input type="number" id="input-nihss" value="12" class="w-full bg-transparent text-center text-xl text-indigo-400 font-mono font-bold focus:outline-none" />
+                            <button onclick="adjustScore('nihss', 1)" class="w-10 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors border-l border-slate-700">+</button>
                         </div>
-                        <input type="range" id="input-nihss" min="0" max="42" step="1" value="12" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500">
                     </div>
+                    
                     <div class="bg-slate-950/50 p-3 rounded-xl border border-slate-800">
-                        <div class="flex justify-between items-end mb-2">
-                            <label class="text-xs text-slate-400">mRS (残疾)</label>
-                            <span id="val-mrs" class="text-lg font-bold font-mono text-emerald-400">0</span>
+                        <div class="text-xs text-slate-400 mb-2 text-center">mRS (发病前残疾)</div>
+                        <div class="flex items-center justify-between bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
+                            <button onclick="adjustScore('mrs', -1)" class="w-10 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors border-r border-slate-700">-</button>
+                            <input type="number" id="input-mrs" value="0" class="w-full bg-transparent text-center text-xl text-emerald-400 font-mono font-bold focus:outline-none" />
+                            <button onclick="adjustScore('mrs', 1)" class="w-10 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors border-l border-slate-700">+</button>
                         </div>
-                        <input type="range" id="input-mrs" min="0" max="5" step="1" value="0" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500">
                     </div>
                 </div>
 
                 <div class="flex justify-between items-center mt-6 mb-2">
-                   <span class="text-xs text-slate-400 uppercase tracking-widest font-semibold">生命体征与生化指征</span>
-                   <span id="bp-target-badge" class="text-[10px] px-2 py-0.5 rounded border bg-slate-800 text-slate-400 border-slate-700">
-                     目标: 常规防线 <220/120
-                   </span>
+                    <span class="text-xs text-slate-400 uppercase tracking-widest font-semibold">生命体征与生化指征</span>
+                    <span id="bp-target-badge" class="text-[10px] px-2 py-0.5 rounded border bg-slate-800 text-slate-400 border-slate-700 transition-colors">
+                        目标: 常规防线 &lt;220/120
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2 md:gap-3 mb-4">
+                    <div class="space-y-1 relative">
+                        <label class="text-[10px] text-slate-400 uppercase tracking-widest flex items-center gap-1"><i data-lucide="scale" class="w-3 h-3"></i> 体重(kg)</label>
+                        <input type="number" id="input-weight" value="70" class="w-full bg-slate-950 border border-slate-700 rounded-md px-2 py-2 text-base text-slate-100 focus:outline-none focus:border-cyan-500 font-mono transition-colors"/>
+                        <span id="weight-warn" class="absolute -top-1 right-0 text-[8px] text-rose-400 hidden bg-rose-950/80 px-1 rounded border border-rose-800">计算值</span>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] text-slate-400 uppercase tracking-widest flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> 年龄</label>
+                        <input type="number" id="input-age" value="65" class="w-full bg-slate-950 border border-slate-700 rounded-md px-2 py-2 text-base text-slate-100 focus:outline-none focus:border-cyan-500 font-mono"/>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] text-slate-400 uppercase tracking-widest">血糖(mmol)</label>
+                        <input type="number" id="input-glucose" step="0.1" value="6.7" class="w-full bg-slate-950 border border-slate-700 rounded-md px-2 py-2 text-base text-slate-100 focus:outline-none focus:border-cyan-500 font-mono"/>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-3 mb-5">
-                   <div class="space-y-1">
-                       <label class="text-[10px] text-slate-400 uppercase tracking-widest flex items-center gap-1">体重 (kg)</label>
-                       <input type="number" id="input-weight" value="70" class="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-lg text-slate-100 focus:outline-none focus:border-cyan-500 font-mono">
-                   </div>
-                   <div class="space-y-1">
-                       <label class="text-[10px] text-slate-400 uppercase tracking-widest">血糖 (mmol/L)</label>
-                       <input type="number" id="input-glucose" step="0.1" value="6.7" class="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-lg text-slate-100 focus:outline-none focus:border-cyan-500 font-mono">
-                   </div>
-                   
-                   <div class="space-y-1">
-                     <label class="text-[10px] text-slate-400 uppercase tracking-widest flex justify-between">收缩压 <span id="label-sys-target" class="text-slate-600 font-mono">&lt;220</span></label>
-                     <input type="number" id="input-sys" value="160" class="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-lg focus:outline-none font-mono text-slate-100">
-                   </div>
-                   <div class="space-y-1">
-                     <label class="text-[10px] text-slate-400 uppercase tracking-widest flex justify-between">舒张压 <span id="label-dia-target" class="text-slate-600 font-mono">&lt;120</span></label>
-                     <input type="number" id="input-dia" value="90" class="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-lg focus:outline-none font-mono text-slate-100">
-                   </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] text-slate-400 uppercase tracking-widest flex justify-between">收缩压 (mmHg) <span id="lbl-sys-target" class="text-slate-600 font-mono">&lt;220</span></label>
+                        <input type="number" id="input-bpsys" value="160" class="w-full bg-slate-950 border rounded-md px-3 py-2 text-lg focus:outline-none font-mono border-slate-700 focus:border-cyan-500 text-slate-100"/>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] text-slate-400 uppercase tracking-widest flex justify-between">舒张压 (mmHg) <span id="lbl-dia-target" class="text-slate-600 font-mono">&lt;120</span></label>
+                        <input type="number" id="input-bpdia" value="90" class="w-full bg-slate-950 border rounded-md px-3 py-2 text-lg focus:outline-none font-mono border-slate-700 focus:border-cyan-500 text-slate-100"/>
+                    </div>
                 </div>
 
+                <!-- 病史与影像状态 -->
                 <div class="space-y-4">
-                  <div>
-                    <label class="text-xs text-slate-400 block mb-1">大血管闭塞 (LVO) 状态</label>
-                    <div class="flex gap-2" id="group-lvo">
-                      <button data-val="unknown" class="flex-1 py-1.5 text-xs rounded border bg-slate-700 text-slate-100 border-slate-500">未出结果</button>
-                      <button data-val="yes" class="flex-1 py-1.5 text-xs rounded border border-slate-800 text-slate-500">证实 LVO</button>
-                      <button data-val="no" class="flex-1 py-1.5 text-xs rounded border border-slate-800 text-slate-500">排除 LVO</button>
+                    <div>
+                        <div class="flex justify-between items-end mb-1">
+                            <label class="text-xs text-slate-400 block">大血管闭塞 (LVO) 状态</label>
+                            <div id="circ-toggle-container" class="hidden flex gap-1 bg-slate-900 p-0.5 rounded border border-slate-700">
+                                <button id="btn-circ-ant" class="px-2 py-0.5 text-[10px] rounded bg-indigo-500 text-white">前循环(MCA)</button>
+                                <button id="btn-circ-post" class="px-2 py-0.5 text-[10px] rounded text-slate-400 hover:text-slate-200">后循环(BAO)</button>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="btn-lvo-unknown" onclick="setState('lvoStatus', 'unknown')" class="flex-1 py-1.5 text-xs rounded border bg-slate-700 text-slate-100 border-slate-500">未确认</button>
+                            <button id="btn-lvo-yes" onclick="setState('lvoStatus', 'yes')" class="flex-1 py-1.5 text-xs rounded border border-slate-800 text-slate-500">证实 LVO</button>
+                            <button id="btn-lvo-no" onclick="setState('lvoStatus', 'no')" class="flex-1 py-1.5 text-xs rounded border border-slate-800 text-slate-500">排除 LVO</button>
+                        </div>
                     </div>
-                  </div>
 
-                  <div>
-                    <label class="text-xs text-slate-400 block mb-1">48h 内抗凝药史</label>
-                    <div class="flex gap-2" id="group-acoag">
-                      <button data-val="none" class="flex-1 py-1.5 text-xs rounded border bg-slate-700 text-slate-100 border-slate-500">无</button>
-                      <button data-val="doac" class="flex-1 py-1.5 text-xs rounded border border-slate-800 text-slate-500">DOACs</button>
-                      <button data-val="warfarin" class="flex-1 py-1.5 text-xs rounded border border-slate-800 text-slate-500">华法林</button>
+                    <div>
+                        <label class="text-xs text-slate-400 block mb-1">48h 内抗凝药史</label>
+                        <div class="flex gap-2">
+                            <button id="btn-ac-none" onclick="setState('anticoagulant', 'none')" class="flex-1 py-1.5 text-xs rounded border bg-slate-700 text-slate-100 border-slate-500">无</button>
+                            <button id="btn-ac-doac" onclick="setState('anticoagulant', 'doac')" class="flex-1 py-1.5 text-xs rounded border border-slate-800 text-slate-500">DOACs</button>
+                            <button id="btn-ac-warfarin" onclick="setState('anticoagulant', 'warfarin')" class="flex-1 py-1.5 text-xs rounded border border-slate-800 text-slate-500">华法林</button>
+                        </div>
                     </div>
-                  </div>
 
-                  <div class="mt-3 flex items-center justify-between bg-rose-950/30 p-2.5 rounded border border-rose-900/50">
-                     <label class="text-xs text-rose-300 flex items-center gap-1.5 cursor-pointer select-none" for="check-contra">
-                       <i data-feather="alert-triangle" class="w-4 h-4"></i> 存在绝对禁忌症 (出血/创伤等)
-                     </label>
-                     <input type="checkbox" id="check-contra" class="w-4 h-4 accent-rose-500 cursor-pointer rounded border-slate-700 bg-slate-900">
-                  </div>
+                    <!-- 绝对禁忌症悬浮提示备忘录 -->
+                    <div class="mt-3 flex items-center justify-between bg-rose-950/30 p-2.5 rounded border border-rose-900/50 relative group">
+                        <label class="text-xs text-rose-300 flex items-center gap-1.5 cursor-pointer" onclick="toggleContra()">
+                            <i data-lucide="shield-alert" class="w-4 h-4"></i> 存在绝对禁忌症
+                            <i data-lucide="help-circle" class="w-3 h-3 text-rose-400/70 hover:text-rose-300 cursor-help"></i>
+                        </label>
+                        <input type="checkbox" id="check-contra" class="w-4 h-4 accent-rose-500 cursor-pointer rounded border-slate-700 bg-slate-900"/>
+                        
+                        <div class="absolute bottom-full left-0 mb-2 hidden group-hover:block w-64 bg-slate-800 text-slate-200 text-[10px] p-3 rounded shadow-2xl border border-slate-700 z-50">
+                            <strong class="text-rose-400 block mb-1 border-b border-slate-700 pb-1">常见禁忌症备忘：</strong>
+                            <ul class="list-disc pl-4 space-y-1">
+                                <li>近3个月内有严重头颅创伤或卒中</li>
+                                <li>既往有蛛网膜下腔出血(SAH)史</li>
+                                <li>近期有颅内/椎管内手术史</li>
+                                <li>活动性内脏出血</li>
+                                <li>已知颅内肿瘤/动静脉畸形</li>
+                            </ul>
+                            <div class="absolute -bottom-1 left-6 w-2 h-2 bg-slate-800 border-b border-r border-slate-700 transform rotate-45"></div>
+                        </div>
+                    </div>
                 </div>
 
+                <!-- 自动/手动折叠：急查化验 -->
                 <div class="mt-5 pt-4 border-t border-slate-800">
-                  <button id="btn-toggle-labs" class="flex items-center justify-between w-full text-left text-slate-300 hover:text-cyan-400 transition-colors group">
-                    <span class="flex items-center gap-2 text-sm font-semibold"><i data-feather="thermometer" class="w-4 h-4 text-purple-400"></i> 急查血液化验 (按需填)</span>
-                    <i data-feather="chevron-down" id="icon-lab-arrow" class="w-4 h-4 text-slate-500"></i>
-                  </button>
-                  <div id="panel-labs" class="hidden grid-cols-3 gap-2 mt-3 bg-slate-950/40 p-3 rounded-lg border border-slate-800/60 shadow-inner">
-                    <div class="space-y-1"><label class="text-[9px] text-slate-400 uppercase text-center block">PLT</label><input type="number" id="input-plt" value="200" class="w-full bg-slate-900 border border-slate-700 rounded px-1 py-1 text-center text-xs focus:outline-none font-mono"></div>
-                    <div class="space-y-1"><label class="text-[9px] text-slate-400 uppercase text-center block">INR</label><input type="number" id="input-inr" step="0.1" value="1.0" class="w-full bg-slate-900 border border-slate-700 rounded px-1 py-1 text-center text-xs focus:outline-none font-mono"></div>
-                    <div class="space-y-1"><label class="text-[9px] text-slate-400 uppercase text-center block">aPTT</label><input type="number" id="input-aptt" value="30" class="w-full bg-slate-900 border border-slate-700 rounded px-1 py-1 text-center text-xs focus:outline-none font-mono"></div>
-                  </div>
+                    <button id="btn-toggle-labs" class="flex items-center justify-between w-full text-left text-slate-300 hover:text-cyan-400 transition-colors group">
+                        <span class="flex items-center gap-2 text-sm font-semibold">
+                            <i data-lucide="test-tube" class="w-4 h-4 text-purple-400"></i> 急查血液化验 (抗凝史强制展开)
+                        </span>
+                        <i id="icon-labs-chevron" data-lucide="chevron-down" class="w-4 h-4 text-slate-500"></i>
+                    </button>
+                    <div id="labs-container" class="hidden grid grid-cols-3 gap-2 mt-3 bg-slate-950/40 p-3 rounded-lg border border-slate-800/60 shadow-inner">
+                        <div class="space-y-1"><label class="text-[9px] text-slate-400 uppercase text-center block">PLT (*10⁹/L)</label><input type="number" id="input-plt" value="200" class="w-full bg-slate-900 border rounded px-1 py-1 text-center text-xs focus:outline-none font-mono border-slate-700" /></div>
+                        <div class="space-y-1"><label class="text-[9px] text-slate-400 uppercase text-center block">INR</label><input type="number" id="input-inr" step="0.1" value="1.0" class="w-full bg-slate-900 border rounded px-1 py-1 text-center text-xs focus:outline-none font-mono border-slate-700" /></div>
+                        <div class="space-y-1"><label class="text-[9px] text-slate-400 uppercase text-center block">aPTT (s)</label><input type="number" id="input-aptt" value="30" class="w-full bg-slate-900 border rounded px-1 py-1 text-center text-xs focus:outline-none font-mono border-slate-700" /></div>
+                    </div>
                 </div>
+
             </section>
         </div>
 
-        <div class="lg:col-span-7 flex flex-col gap-5">
-            
-            <section class="bg-gradient-to-br from-slate-900 to-slate-950 rounded-2xl p-5 border border-slate-700 shadow-xl relative overflow-hidden flex-shrink-0">
-               <div class="absolute right-0 top-0 w-64 h-64 bg-cyan-500/5 blur-[100px] rounded-full pointer-events-none"></div>
-               <div class="flex justify-between items-center mb-5 relative z-10">
-                  <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-100">
-                    <i data-feather="activity" class="w-5 h-5 text-emerald-400"></i> AI 行动清单 (Action Plan)
-                  </h2>
-                  <div class="flex gap-1 bg-slate-900 p-1 rounded-md border border-slate-700" id="group-evtstatus">
-                    <button data-val="pre" class="px-2 py-1 text-[10px] md:text-xs rounded bg-slate-700 text-cyan-400">抢救</button>
-                    <button data-val="post-success" class="px-2 py-1 text-[10px] md:text-xs rounded text-slate-500">再通</button>
-                    <button data-val="post-fail" class="px-2 py-1 text-[10px] md:text-xs rounded text-slate-500">失败</button>
-                  </div>
-               </div>
-               
-               <div id="action-plan-container" class="space-y-3 relative z-10">
-                  </div>
-            </section>
-
-            <section class="bg-slate-900 rounded-2xl p-5 border border-slate-800 shadow-xl flex-grow flex flex-col">
-              <div class="flex justify-between items-start mb-4">
-                <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-100"><i data-feather="map" class="w-4 h-4 text-purple-400"></i> ASPECTS 脑图 (辅助决策)</h2>
-                <div class="text-right">
-                  <div class="text-[10px] text-slate-400 uppercase tracking-widest mb-0.5">Score</div>
-                  <div class="text-3xl font-bold font-mono leading-none">
-                    <span id="aspects-score-display" class="text-emerald-400 transition-all">10</span>
-                    <span class="text-lg text-slate-600">/10</span>
-                  </div>
-                </div>
-              </div>
-
-              <div class="relative flex-grow min-h-[220px] flex flex-col md:flex-row items-center justify-center gap-6 md:gap-12 bg-slate-950/50 rounded-xl border border-slate-800/50 p-4">
-                
-                <div class="relative w-36 h-44">
-                  <h3 class="absolute -top-5 w-full text-center text-[10px] text-slate-500 uppercase">基底节平面</h3>
-                  <svg viewBox="0 0 100 120" class="w-full h-full drop-shadow-2xl">
-                    <ellipse cx="50" cy="60" rx="48" ry="58" fill="#0f172a" stroke="#1e293b" stroke-width="1" />
-                    <path id="reg-M1" d="M 5,60 C 5,20 40,5 50,5 L 50,30 L 20,60 Z" class="region-path fill-cyan-500/20" />
-                    <text x="25" y="35" class="text-[6px] fill-slate-300 pointer-events-none font-mono">M1</text>
-                    <path id="reg-M2" d="M 5,60 L 20,60 L 20,80 L 10,100 C 5,80 5,60 5,60 Z" class="region-path fill-cyan-600/20" />
-                    <text x="12" y="75" class="text-[6px] fill-slate-300 pointer-events-none font-mono">M2</text>
-                    <path id="reg-M3" d="M 10,100 L 20,80 L 50,85 L 50,118 C 30,115 15,110 10,100 Z" class="region-path fill-cyan-700/20" />
-                    <text x="30" y="102" class="text-[6px] fill-slate-300 pointer-events-none font-mono">M3</text>
-                    <path id="reg-I" d="M 22,50 L 30,50 L 28,75 L 22,75 Z" class="region-path fill-blue-400/30" />
-                    <text x="24" y="65" class="text-[5px] fill-slate-200 pointer-events-none font-mono">I</text>
-                    <path id="reg-L" d="M 32,55 L 42,55 L 40,75 L 32,70 Z" class="region-path fill-indigo-400/30" />
-                    <text x="35" y="65" class="text-[5px] fill-slate-200 pointer-events-none font-mono">L</text>
-                    <path id="reg-IC" d="M 44,50 L 48,50 L 45,70 L 42,70 Z" class="region-path fill-purple-400/30" />
-                    <text x="44" y="62" class="text-[4px] fill-slate-200 pointer-events-none font-mono">IC</text>
-                    <path id="reg-C" d="M 35,35 L 48,35 L 48,45 L 35,45 Z" class="region-path fill-violet-400/30" />
-                    <text x="40" y="42" class="text-[5px] fill-slate-200 pointer-events-none font-mono">C</text>
-                    <path d="M 50,5 L 50,118 L 95,60 Z" fill="#1e293b" opacity="0.3" />
-                    <line x1="50" y1="0" x2="50" y2="120" stroke="#334155" stroke-width="1" stroke-dasharray="2,2" />
-                  </svg>
-                </div>
-
-                <div class="relative w-28 h-36">
-                  <h3 class="absolute -top-5 w-full text-center text-[10px] text-slate-500 uppercase">放射冠平面</h3>
-                  <svg viewBox="0 0 100 120" class="w-full h-full drop-shadow-2xl">
-                    <ellipse cx="50" cy="60" rx="42" ry="52" fill="#0f172a" stroke="#1e293b" stroke-width="1" />
-                    <path id="reg-M4" d="M 12,50 C 12,25 35,10 50,8 L 50,50 Z" class="region-path fill-cyan-400/20" />
-                    <text x="30" y="35" class="text-[6px] fill-slate-300 pointer-events-none font-mono">M4</text>
-                    <path id="reg-M5" d="M 12,50 L 50,50 L 50,70 L 10,75 C 10,65 12,50 12,50 Z" class="region-path fill-cyan-500/20" />
-                    <text x="25" y="65" class="text-[6px] fill-slate-300 pointer-events-none font-mono">M5</text>
-                    <path id="reg-M6" d="M 10,75 L 50,70 L 50,110 C 30,105 15,95 10,75 Z" class="region-path fill-cyan-600/20" />
-                    <text x="30" y="95" class="text-[6px] fill-slate-300 pointer-events-none font-mono">M6</text>
-                    <path d="M 50,8 L 50,110 L 88,50 Z" fill="#1e293b" opacity="0.3" />
-                    <line x1="50" y1="0" x2="50" y2="120" stroke="#334155" stroke-width="1" stroke-dasharray="2,2" />
-                  </svg>
-                </div>
-              </div>
-              
-              <div class="mt-3 flex justify-end">
-                <button id="btn-reset-aspects" class="text-[10px] text-slate-500 hover:text-cyan-400 transition-colors">
-                  [ ↺ 重置满分 ]
-                </button>
-              </div>
-            </section>
-        </div>
     </div>
-</div>
 
-<script>
-// 初始化 Feather Icons
-feather.replace();
+    <!-- 核心逻辑脚本 -->
+    <script>
+        lucide.createIcons();
 
-// --- 状态管理 (模仿 React State) ---
-const state = {
-    timeOnset: 2.5,
-    isWakeUpStroke: false,
-    nihss: 12,
-    mrs: 0,
-    weight: 70,
-    glucose: 6.7,
-    bpSys: 160,
-    bpDia: 90,
-    anticoagulant: 'none',
-    lvoStatus: 'unknown',
-    hasContra: false,
-    evtStatus: 'pre',
-    showLabs: false,
-    plt: 200,
-    inr: 1.0,
-    aptt: 30,
-    aspects: { C:true, L:true, IC:true, I:true, M1:true, M2:true, M3:true, M4:true, M5:true, M6:true }
-};
+        const defaultState = {
+            timeOnset: 2.5,
+            isWakeUpStroke: false,
+            imagingMatched: false,
+            nihss: 12,
+            mrs: 0,
+            weight: 70,
+            age: 65,         
+            glucose: 6.7,
+            bpSys: 160,
+            bpDia: 90,
+            anticoagulant: 'none',
+            lvoStatus: 'unknown',
+            circLocation: 'anterior', 
+            hasContra: false,
+            evtStatus: 'pre',         
+            showLabs: false,
+            plt: 200,
+            inr: 1.0,
+            aptt: 30,
+            aspects: { C: true, L: true, IC: true, I: true, M1: true, M2: true, M3: true, M4: true, M5: true, M6: true }
+        };
 
-const aspectsConfig = {
-    M1: 'fill-cyan-500/20', M2: 'fill-cyan-600/20', M3: 'fill-cyan-700/20',
-    I: 'fill-blue-400/30', L: 'fill-indigo-400/30', IC: 'fill-purple-400/30', C: 'fill-violet-400/30',
-    M4: 'fill-cyan-400/20', M5: 'fill-cyan-500/20', M6: 'fill-cyan-600/20'
-};
+        let state = JSON.parse(JSON.stringify(defaultState));
 
-// --- DOM 元素引用 ---
-const els = {
-    timeSlider: document.getElementById('input-time'),
-    timeVal: document.getElementById('val-time'),
-    btnWakeup: document.getElementById('btn-wakeup'),
-    timeSliderContainer: document.getElementById('time-slider-container'),
-    timeWakeupMsg: document.getElementById('time-wakeup-msg'),
-    
-    nihssSlider: document.getElementById('input-nihss'),
-    nihssVal: document.getElementById('val-nihss'),
-    mrsSlider: document.getElementById('input-mrs'),
-    mrsVal: document.getElementById('val-mrs'),
-    
-    weightInput: document.getElementById('input-weight'),
-    glucoseInput: document.getElementById('input-glucose'),
-    sysInput: document.getElementById('input-sys'),
-    diaInput: document.getElementById('input-dia'),
-    sysLabelTarget: document.getElementById('label-sys-target'),
-    diaLabelTarget: document.getElementById('label-dia-target'),
-    bpTargetBadge: document.getElementById('bp-target-badge'),
-    
-    checkContra: document.getElementById('check-contra'),
-    
-    btnToggleLabs: document.getElementById('btn-toggle-labs'),
-    panelLabs: document.getElementById('panel-labs'),
-    iconLabArrow: document.getElementById('icon-lab-arrow'),
-    pltInput: document.getElementById('input-plt'),
-    inrInput: document.getElementById('input-inr'),
-    apttInput: document.getElementById('input-aptt'),
-    
-    actionPlanContainer: document.getElementById('action-plan-container'),
-    aspectsScoreDisplay: document.getElementById('aspects-score-display'),
-    btnResetAspects: document.getElementById('btn-reset-aspects')
-};
+        const aspectsColors = {
+            M1: 'cyan-500', M2: 'cyan-600', M3: 'cyan-700',
+            I: 'blue-400', L: 'indigo-400', IC: 'purple-400', C: 'violet-400',
+            M4: 'cyan-400', M5: 'cyan-500', M6: 'cyan-600'
+        };
 
-// --- 核心逻辑引擎 ---
+        function evaluateLogic() {
+            const aspectsScore = Object.values(state.aspects).filter(Boolean).length;
+            
+            let bpTarget = { sys: 220, dia: 120, type: 'base', label: '常规防线 <220/120' };
+            if (state.evtStatus === 'post-success') bpTarget = { sys: 140, dia: 90, type: 'strict', label: '再通维持 120-139' };
+            else if (state.evtStatus === 'post-fail') bpTarget = { sys: 220, dia: 120, type: 'permissive', label: '未通允许性高压' };
+            else if (state.evtStatus === 'post-ivt') bpTarget = { sys: 180, dia: 105, type: 'ivt-post', label: '溶栓后极严 <180/105' };
+            else if ((state.timeOnset <= 9 || state.isWakeUpStroke) && !state.hasContra && state.anticoagulant === 'none') bpTarget = { sys: 185, dia: 110, type: 'ivt', label: '溶栓靶标 <185/110' };
 
-function calculateLogic() {
-    // 1. 计算 Aspects 分数
-    let aspectsScore = Object.values(state.aspects).filter(Boolean).length;
-    els.aspectsScoreDisplay.innerText = aspectsScore;
-    if(aspectsScore >= 6) {
-        els.aspectsScoreDisplay.className = 'text-emerald-400 transition-all';
-    } else {
-        els.aspectsScoreDisplay.className = 'text-rose-500 drop-shadow-[0_0_8px_rgba(244,63,94,0.5)] transition-all';
-    }
+            const safeWeight = Math.min(Math.max(state.weight, 30), 150); 
+            const tnkDoseRaw = Math.min(safeWeight * 0.25, 25);
+            const tpaTotalRaw = Math.min(safeWeight * 0.9, 90);
+            const tnkDose = tnkDoseRaw.toFixed(1);
+            const tpaTotal = tpaTotalRaw.toFixed(1);
+            const tpaBolus = (tpaTotalRaw * 0.1).toFixed(1);
+            const tpaInfusion = (tpaTotalRaw * 0.9).toFixed(1);
 
-    // 2. 血压目标判定
-    let bpTarget = { sys: 220, dia: 120, type: 'base', label: '常规防线 <220/120' };
-    if (state.evtStatus === 'post-success') bpTarget = { sys: 140, dia: 90, type: 'strict', label: '维持 120-139' };
-    else if (state.evtStatus === 'post-fail') bpTarget = { sys: 220, dia: 120, type: 'permissive', label: '允许性高血压' };
-    else if (state.timeOnset <= 9 && !state.hasContra && state.anticoagulant === 'none') bpTarget = { sys: 185, dia: 110, type: 'ivt', label: '溶栓靶标 <185/110' };
+            let ivt = { eligible: false, shortReason: '', needsMatchUnlock: false };
+            let evt = { eligible: false, message: '', isMildWarning: false };
 
-    // 更新血压UI
-    els.sysLabelTarget.innerText = `<${bpTarget.sys}`;
-    els.diaLabelTarget.innerText = `<${bpTarget.dia}`;
-    els.bpTargetBadge.innerText = `目标: ${bpTarget.label}`;
-    els.bpTargetBadge.className = `text-[10px] px-2 py-0.5 rounded border ${bpTarget.type === 'ivt' ? 'bg-cyan-900/30 text-cyan-400 border-cyan-800' : 'bg-slate-800 text-slate-400 border-slate-700'}`;
-    
-    updateInputWarning(els.sysInput, state.bpSys > bpTarget.sys);
-    updateInputWarning(els.diaInput, state.bpDia > bpTarget.dia);
-    updateInputWarning(els.pltInput, state.plt < 100);
-    updateInputWarning(els.inrInput, state.inr > 1.7);
-    updateInputWarning(els.apttInput, state.aptt > 40);
+            let labWarning = '';
+            if (state.showLabs) {
+                if (state.plt < 100) labWarning = `血小板过低 (${state.plt} ×10⁹/L)`;
+                else if (state.inr > 1.7) labWarning = `INR 升高 (${state.inr} > 1.7)`;
+                else if (state.aptt > 40) labWarning = `aPTT 延长 (${state.aptt}s)`;
+            }
 
-    // 3. AI 决策引擎
-    const safeWeight = state.weight > 0 ? state.weight : 70;
-    const tnkDoseRaw = Math.min(safeWeight * 0.25, 25);
-    const tpaTotalRaw = Math.min(safeWeight * 0.9, 90);
-    const tnkDose = tnkDoseRaw.toFixed(1);
-    const tpaTotal = tpaTotalRaw.toFixed(1);
-    const tpaBolus = (tpaTotalRaw * 0.1).toFixed(1);
-    const tpaInfusion = (tpaTotalRaw * 0.9).toFixed(1);
+            // 【重大修复】：精确界定影像学匹配触发条件，剔除 >9h 的死角
+            const needsImagingMatch = state.isWakeUpStroke || (state.timeOnset > 4.5 && state.timeOnset <= 9);
+            
+            // 【逻辑补丁优化】：增加 DOAC 特异性逆转声明
+            if (state.hasContra) {
+                ivt = { eligible: false, shortReason: '存在临床绝对禁忌症' };
+            } else if (labWarning) {
+                ivt = { eligible: false, shortReason: `危急化验禁忌: ${labWarning}` };
+            } else if (state.anticoagulant === 'doac') {
+                ivt = { eligible: false, shortReason: `近期有 DOAC 用药史，常规禁忌静脉溶栓。除非可使用特异性拮抗剂（如依达赛珠单抗），或特异性凝血因子检测排除了药物活性。` };
+            } else if (state.anticoagulant === 'warfarin') {
+                ivt = { eligible: false, shortReason: `近期有华法林用药史，除非 INR ≤ 1.7 或已使用逆转剂，否则禁忌溶栓。` };
+            } else if (state.timeOnset > 9 && !state.isWakeUpStroke) {
+                // 【重大修复】：9h 绝对硬上限拦截 (Hard Stop)
+                ivt = { eligible: false, shortReason: `发病已达 ${state.timeOnset}h，超过静脉溶栓 9h 绝对硬上限，出血风险极高。` };
+            } else if (needsImagingMatch) {
+                if (!state.imagingMatched) {
+                    ivt = { eligible: false, shortReason: '等待影像学(CTP/MRI)证实半暗带以解锁处方', needsMatchUnlock: true };
+                } else {
+                    ivt = { eligible: true, shortReason: '影像证实存在半暗带，符合延长窗/醒后溶栓标准' };
+                }
+            } else {
+                if (state.timeOnset <= 4.5) {
+                    if (state.nihss <= 5) ivt = { eligible: true, shortReason: '符合时间窗 (低NIHSS需评估是否致残)' };
+                    else ivt = { eligible: true, shortReason: '符合标准发病时间窗 (≤4.5h)' };
+                } else {
+                    ivt = { eligible: false, shortReason: '超出时间窗' };
+                }
+            }
 
-    let ivt = { eligible: false, shortReason: '' };
-    let evt = { eligible: false, message: '' };
-    let labWarning = '';
-    
-    if (state.showLabs) {
-        if (state.plt < 100) labWarning = `血小板过低 (${state.plt} ×10⁹/L)`;
-        else if (state.inr > 1.7) labWarning = `INR 升高 (${state.inr} > 1.7)`;
-        else if (state.aptt > 40) labWarning = `aPTT 延长 (${state.aptt}s)`;
-    }
+            if (state.lvoStatus === 'no') {
+                evt = { eligible: false, message: '证实无大血管闭塞 (Non-LVO)，无取栓指征。' };
+            } else if (state.lvoStatus === 'yes' && state.circLocation === 'posterior') {
+                evt = { eligible: true, message: '后循环大血管闭塞 (BAO): 预后极其凶险，强烈建议尽早进行 EVT，时间窗可放宽至 24 小时或更长，无需严苛影像匹配。' };
+            } else if (state.lvoStatus === 'yes' && state.circLocation === 'anterior' && state.nihss < 6) {
+                evt = { eligible: true, isMildWarning: true, message: '轻型卒中 (NIHSS < 6) 伴前循环大血管闭塞：目前直接取栓获益证据尚不充分，建议优先静脉溶栓并严密观察，若症状恶化随时桥接取栓。' };
+            } else {
+                const timeToUse = state.isWakeUpStroke ? 24 : state.timeOnset; 
+                let baseEvtMessage = '';
+                if (aspectsScore >= 6) {
+                    if (timeToUse < 6 && !state.isWakeUpStroke) baseEvtMessage = '前循环大血管闭塞(LVO)强烈推荐直接EVT (Class I)。';
+                    else if (timeToUse <= 24) baseEvtMessage = '需符合临床-影像不匹配标准，推荐EVT (Class I)。';
+                    else baseEvtMessage = '超出常规EVT时间窗(>24h)，仅限极特殊个体化评估。';
+                } else {
+                    if (timeToUse <= 24 && aspectsScore >= 3) baseEvtMessage = '大核心梗死(ASPECTS 3-5): 基于最新试验证据，EVT可改善结局，合理推荐。';
+                    else baseEvtMessage = '广泛核心梗死 (ASPECTS 0-2)，EVT获益不明确，出血风险极高。';
+                }
+                
+                if (state.mrs >= 3) {
+                    evt = { eligible: (timeToUse <= 24 && aspectsScore >= 3), message: `${baseEvtMessage} 【⚠️发病前已中重度残疾(mRS ${state.mrs}分)，临床净获益受限，请谨慎评估。】` };
+                } else {
+                    evt = { eligible: (timeToUse <= 24 && aspectsScore >= 3), message: baseEvtMessage };
+                }
+            }
 
-    // IVT 判定
-    if (state.hasContra) ivt = { eligible: false, shortReason: '存在临床绝对禁忌症 (如活动出血、近期严重颅脑创伤/手术等)' };
-    else if (labWarning) ivt = { eligible: false, shortReason: `危急化验结果禁忌: ${labWarning}` };
-    else if (state.anticoagulant !== 'none') ivt = { eligible: false, shortReason: `48小时内有抗凝用药史 (${state.anticoagulant === 'doac' ? 'DOAC' : '华法林'})` };
-    else if (state.isWakeUpStroke) ivt = { eligible: true, shortReason: '醒后卒中/发病时间不明：需 MRI DWI-FLAIR 序列不匹配或 CTP 核心-灌注不匹配方可溶栓。' };
-    else if (state.timeOnset <= 4.5) {
-        if (state.nihss <= 5) ivt = { eligible: true, shortReason: '符合时间窗 (低NIHSS需评估是否致残)' };
-        else ivt = { eligible: true, shortReason: '符合标准发病时间窗 (≤4.5h)' };
-    } else if (state.timeOnset > 4.5 && state.timeOnset <= 9) ivt = { eligible: true, shortReason: '处于延长窗 (需影像学组织不匹配证实)' };
-    else ivt = { eligible: false, shortReason: '超出静脉溶栓时间窗 (>9h)' };
+            let planSteps = [];
 
-    // EVT 判定
-    if (state.lvoStatus === 'no') evt = { eligible: false, message: '影像证实无大血管闭塞 (Non-LVO)，无血管内治疗指征。' };
-    else {
-        const timeToUse = state.isWakeUpStroke ? 24 : state.timeOnset; 
-        let baseEvtMessage = '';
-        if (aspectsScore >= 6) {
-            if (timeToUse < 6 && !state.isWakeUpStroke) baseEvtMessage = '前循环大血管闭塞(LVO)强烈推荐直接EVT (Class I)。';
-            else if (timeToUse <= 24) baseEvtMessage = '需符合 DAWN/DEFUSE 3 临床-影像不匹配标准，推荐EVT (Class I)。';
-            else baseEvtMessage = '超出常规EVT时间窗(>24h)，仅限研究或极特殊个体化评估。';
-        } else {
-            if (timeToUse <= 24 && aspectsScore >= 3) baseEvtMessage = '大核心梗死(ASPECTS 3-5): 基于最新试验(SELECT2等)，EVT可改善结局，合理推荐。';
-            else baseEvtMessage = '广泛核心梗死 (ASPECTS 0-2)，EVT获益不明确，出血风险极高。';
+            if (state.evtStatus !== 'pre') {
+                if (state.evtStatus === 'post-success') {
+                    if (state.bpSys < 140) planSteps.push({ id: 'bp-post-low', icon: 'alert-triangle', iconColor: 'text-rose-500', borderColor: 'border-rose-500/30 bg-rose-500/10', titleColor: 'text-rose-400', title: '术后管理红色警告：停止强化降压', desc: `EVT术后已完全再通，请避免强化降压至 < 140 mmHg，可能导致神经功能恶化！`});
+                    else planSteps.push({ id: 'bp-post-safe', icon: 'check-circle', iconColor: 'text-emerald-500', borderColor: 'border-emerald-500/30 bg-emerald-500/5', titleColor: 'text-emerald-400', title: '术后管理：生命体征平稳', desc: `术后再通血压控制良好，建议维持在 < 180/105 mmHg。`});
+                } else if (state.evtStatus === 'post-fail') {
+                    planSteps.push({ id: 'bp-post-fail', icon: 'activity', iconColor: 'text-amber-500', borderColor: 'border-amber-500/30 bg-amber-500/10', titleColor: 'text-amber-400', title: '术后管理：允许性高血压', desc: `EVT未再通：需维持较高血压，避免过度降压导致侧支崩溃。`});
+                } else if (state.evtStatus === 'post-ivt') {
+                    if (state.bpSys >= 180 || state.bpDia >= 105) planSteps.push({ id: 'ivt-post-high', icon: 'alert-triangle', iconColor: 'text-rose-500', borderColor: 'border-rose-500/30 bg-rose-500/10', titleColor: 'text-rose-400', title: '溶栓后紧急警报：极高出血风险', desc: `指南要求溶栓后24h内严控在 <180/105 mmHg。立刻调整降压泵！`});
+                    else planSteps.push({ id: 'ivt-post-safe', icon: 'check-circle', iconColor: 'text-cyan-400', borderColor: 'border-cyan-500/30 bg-cyan-900/10', titleColor: 'text-cyan-400', title: '溶栓后管理 (24h 严密监测)', desc: `维持 <180/105 mmHg，密切观察出血转化(sICH)体征。`});
+                }
+                return { planSteps, aspectsScore, bpTarget, needsImagingMatch, safeWeight };
+            }
+
+            let isGlucoseSafe = false;
+            if (state.glucose < 3.3) {
+                planSteps.push({ id: 'glu-low', icon: 'alert-triangle', iconColor: 'text-rose-500', borderColor: 'border-rose-500/40 bg-rose-500/10', titleColor: 'text-rose-400', title: 'STEP 1: 紧急纠正低血糖 (Red Flag)', desc: '血糖 < 3.3 mmol/L。需立即静推葡萄糖，排除低血糖模拟脑卒中。'});
+            } else if (state.glucose > 22.2) {
+                planSteps.push({ id: 'glu-high', icon: 'alert-circle', iconColor: 'text-amber-500', borderColor: 'border-amber-500/40 bg-amber-500/10', titleColor: 'text-amber-400', title: 'STEP 1: 严重高血糖警报 (Hyperglycemia)', desc: `血糖高达 ${state.glucose} mmol/L。建议使用胰岛素将其控制在 7.8-10.0 mmol/L 之间，并高度警惕高血糖模拟卒中可能。`});
+                isGlucoseSafe = true; 
+            } else {
+                isGlucoseSafe = true;
+            }
+
+            if (isGlucoseSafe) {
+                let bpSafeForIvt = state.bpSys <= 185 && state.bpDia <= 110;
+                if (!bpSafeForIvt && (ivt.eligible || ivt.needsMatchUnlock)) {
+                    planSteps.push({ id: 'bp-high', icon: 'activity', iconColor: 'text-rose-500', borderColor: 'border-rose-500/40 bg-rose-500/10', titleColor: 'text-rose-400', title: 'STEP 1: 紧急降压准备溶栓', desc: `血压超出安全阈值。立即使用静脉降压药降至 < 185/110 mmHg。`});
+                } else if (state.glucose <= 22.2) {
+                    planSteps.push({ id: 'bp-safe', icon: 'check-circle', iconColor: 'text-emerald-500', borderColor: 'border-emerald-500/30 bg-emerald-500/5', titleColor: 'text-emerald-400', title: 'STEP 1: 基础生命体征评估', desc: `生命体征及生化指标基本达标，进入再灌注评估。`});
+                }
+            }
+
+            let ivtAgeWarn = (state.age > 80 && state.timeOnset > 3 && state.timeOnset <= 4.5) ? 
+                `<div class="mt-2 text-amber-400/90 text-xs bg-amber-900/20 p-2 rounded border border-amber-500/20">⚠️ <b>高龄警示</b>：>80岁且处于 3-4.5h 窗，出血转化风险相对增加，需充分结合家属意愿。</div>` : ``;
+            let evtAgeWarn = (state.age > 80 && evt.eligible) ? ` 【⚠️高龄(>80岁)取栓预后不良风险增加，需谨慎评估净获益】` : ``;
+
+            let bpSafe = state.bpSys <= 185 && state.bpDia <= 110;
+            if (ivt.needsMatchUnlock) {
+                planSteps.push({ id: 'ivt-locked', icon: 'lock', iconColor: 'text-amber-400', borderColor: 'border-amber-500/40 bg-amber-900/20', titleColor: 'text-amber-400', title: `STEP 2: 静脉溶栓处方 [等待影像学解锁]`, 
+                desc: `<div class="mt-2 text-amber-200/80">处于延长窗或时间不明。必须勾选左侧的 <strong>[已证实高级影像学存在半暗带]</strong> 后，方可解锁具体剂量。防止违规用药！</div>`});
+            } else if (ivt.eligible && !bpSafe) {
+                planSteps.push({ id: 'ivt-locked-bp', icon: 'lock', iconColor: 'text-rose-400', borderColor: 'border-rose-500/40 bg-rose-900/20', titleColor: 'text-rose-400', title: `STEP 2: 静脉溶栓处方 [等待高血压强制解锁]`, 
+                desc: `<div class="mt-2 text-rose-200/80">当前血压未达标 (${state.bpSys}/${state.bpDia})。必须等待血压降至安全范围 (<strong>&lt;185/110 mmHg</strong>) 后解锁具体剂量，以防引起致命性脑出血！</div>`});
+            } else if (ivt.eligible && bpSafe) {
+                let descHtml = `
+                    <div class="mt-2 text-slate-300">
+                        <span class="text-xs text-slate-400 bg-slate-900 px-2 py-1 rounded border border-slate-700">按照 ${safeWeight} kg 安全计算剂量：</span>
+                        <ul class="list-disc pl-5 mt-3 space-y-2">
+                            <li><strong class="text-cyan-300">首选：替奈普酶 (TNK) <span class="text-xl mx-1">${tnkDose}</span> mg</strong>，单次静推 <span class="text-[10px] text-slate-500">(极量25mg)</span></li>
+                            <li>备选：阿替普酶 (tPA) ${tpaTotal} mg，静推 <strong>${tpaBolus} mg</strong>，剩余 <strong>${tpaInfusion} mg</strong> 滴注。</li>
+                        </ul>
+                        ${ivtAgeWarn}
+                    </div>
+                `;
+                planSteps.push({ id: 'ivt-go', icon: 'syringe', iconColor: 'text-cyan-400', borderColor: 'border-cyan-500/50 bg-cyan-900/20', titleColor: 'text-cyan-400', title: `STEP 2: 静脉溶栓 (IVT) 处方`, desc: descHtml});
+            } else {
+                planSteps.push({ id: 'ivt-no', icon: 'shield-alert', iconColor: 'text-rose-500', borderColor: 'border-rose-500/30 bg-rose-500/10', titleColor: 'text-rose-400', title: 'STEP 2: 暂缓/禁忌静脉溶栓', desc: `不符合溶栓指征：${ivt.shortReason}`});
+            }
+
+            if (evt.eligible) {
+                const iconColor = evt.isMildWarning ? 'text-amber-400' : 'text-indigo-400';
+                const borderColor = evt.isMildWarning ? 'border-amber-500/40 bg-amber-900/20' : 'border-indigo-500/40 bg-indigo-900/20';
+                planSteps.push({ id: 'evt-go', icon: evt.isMildWarning ? 'alert-circle' : 'zap', iconColor: iconColor, borderColor: borderColor, titleColor: iconColor, title: 'STEP 3: 血管内取栓 (EVT) 路径', desc: `${evt.message}${evtAgeWarn} ${ivt.eligible && !evt.isMildWarning && state.lvoStatus !== 'unknown' ? '建议溶栓与取栓桥接并行。' : ''}`});
+            } else {
+                planSteps.push({ id: 'evt-no', icon: 'brain', iconColor: 'text-slate-500', borderColor: 'border-slate-800 bg-slate-900/50', titleColor: 'text-slate-400', title: 'STEP 3: 血管内取栓评估', desc: `${evt.message || `无明确EVT指征。`}`});
+            }
+
+            if (!ivt.eligible && !ivt.needsMatchUnlock && !evt.eligible) {
+                let daptDesc = '';
+                if (state.nihss <= 3) {
+                    daptDesc = '患者为极轻型卒中(NIHSS ≤ 3)。基于 <strong>CHANCE / POINT 试验</strong>，强烈推荐发病24h内尽早启动 <strong>阿司匹林+氯吡格雷 (21天)</strong> 双联抗血小板治疗。';
+                } else if (state.nihss <= 5) {
+                    daptDesc = '患者为轻型卒中(NIHSS 4-5)。基于 <strong>THALES 试验</strong>，推荐发病24h内启动 <strong>阿司匹林+替格瑞洛 (30天)</strong> 双联抗血小板治疗。【注：此类患者氯吡格雷双抗获益证据不足】。';
+                } else {
+                    daptDesc = '患者不符合急诊血管开通条件。建议尽早(发病48h内)启动阿司匹林单抗治疗，密切监控并发症。';
+                }
+                planSteps.push({ id: 'medical-mgmt', icon: 'activity-square', iconColor: 'text-purple-400', borderColor: 'border-purple-500/40 bg-purple-900/20', titleColor: 'text-purple-400', title: 'STEP 4: 早期内科与抗血小板治疗 (Plan B)', desc: daptDesc});
+            }
+
+            return { planSteps, aspectsScore, bpTarget, needsImagingMatch, safeWeight };
         }
+
+        // --- DOM 更新渲染引擎 ---
+        function render() {
+            const result = evaluateLogic();
+
+            document.getElementById('val-time').innerText = state.timeOnset.toFixed(1);
+            document.getElementById('input-time').value = state.timeOnset;
+            
+            // 同步 Stepper 的数值
+            document.getElementById('input-nihss').value = state.nihss;
+            document.getElementById('input-mrs').value = state.mrs;
+            document.getElementById('input-mrs').className = `w-full bg-transparent text-center text-xl font-mono font-bold focus:outline-none ${state.mrs >= 3 ? 'text-rose-400' : 'text-emerald-400'}`;
+
+            const weightInput = document.getElementById('input-weight');
+            const weightWarn = document.getElementById('weight-warn');
+            if (state.weight < 30) {
+                weightInput.classList.replace('border-slate-700', 'border-rose-500');
+                weightInput.classList.replace('text-slate-100', 'text-rose-400');
+                weightWarn.innerText = "按最低 30kg 算";
+                weightWarn.classList.remove('hidden');
+            } else if (state.weight > 150) {
+                weightInput.classList.replace('border-slate-700', 'border-rose-500');
+                weightInput.classList.replace('text-slate-100', 'text-rose-400');
+                weightWarn.innerText = "按极量 150kg 算";
+                weightWarn.classList.remove('hidden');
+            } else {
+                weightInput.classList.replace('border-rose-500', 'border-slate-700');
+                weightInput.classList.replace('text-rose-400', 'text-slate-100');
+                weightWarn.classList.add('hidden');
+            }
+
+            const imagingLock = document.getElementById('imaging-lock-container');
+            if (result.needsImagingMatch && state.evtStatus === 'pre') {
+                imagingLock.classList.remove('hidden');
+                document.getElementById('check-imaging-match').checked = state.imagingMatched;
+            } else {
+                imagingLock.classList.add('hidden');
+            }
+
+            const btnWakeup = document.getElementById('btn-wakeup');
+            if (state.isWakeUpStroke) {
+                btnWakeup.className = "flex items-center gap-1.5 px-3 py-1 text-xs rounded-full transition-all border bg-indigo-500/20 text-indigo-300 border-indigo-500/50";
+                document.getElementById('time-slider-container').classList.add('hidden');
+                document.getElementById('wakeup-msg').classList.remove('hidden');
+            } else {
+                btnWakeup.className = "flex items-center gap-1.5 px-3 py-1 text-xs rounded-full transition-all border bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200";
+                document.getElementById('time-slider-container').classList.remove('hidden');
+                document.getElementById('wakeup-msg').classList.add('hidden');
+            }
+
+            const circContainer = document.getElementById('circ-toggle-container');
+            if (state.lvoStatus === 'yes') {
+                circContainer.classList.remove('hidden');
+                document.getElementById('btn-circ-ant').className = state.circLocation === 'anterior' ? "px-2 py-0.5 text-[10px] rounded bg-indigo-500 text-white" : "px-2 py-0.5 text-[10px] rounded text-slate-400 hover:text-slate-200";
+                document.getElementById('btn-circ-post').className = state.circLocation === 'posterior' ? "px-2 py-0.5 text-[10px] rounded bg-indigo-500 text-white" : "px-2 py-0.5 text-[10px] rounded text-slate-400 hover:text-slate-200";
+            } else {
+                circContainer.classList.add('hidden');
+            }
+
+            const lvoClasses = {
+                unknown: state.lvoStatus === 'unknown' ? 'bg-slate-700 text-slate-100 border-slate-500' : 'border-slate-800 text-slate-500',
+                yes: state.lvoStatus === 'yes' ? 'bg-rose-900/40 text-rose-400 border-rose-500/50' : 'border-slate-800 text-slate-500',
+                no: state.lvoStatus === 'no' ? 'bg-emerald-900/40 text-emerald-400 border-emerald-500/50' : 'border-slate-800 text-slate-500'
+            };
+            document.getElementById('btn-lvo-unknown').className = `flex-1 py-1.5 text-xs rounded border ${lvoClasses.unknown}`;
+            document.getElementById('btn-lvo-yes').className = `flex-1 py-1.5 text-xs rounded border ${lvoClasses.yes}`;
+            document.getElementById('btn-lvo-no').className = `flex-1 py-1.5 text-xs rounded border ${lvoClasses.no}`;
+
+            const aspectsSection = document.getElementById('aspects-section');
+            if (state.lvoStatus === 'yes' && state.circLocation === 'anterior') {
+                aspectsSection.classList.remove('hidden');
+            } else {
+                aspectsSection.classList.add('hidden');
+            }
+
+            const acClasses = {
+                none: state.anticoagulant === 'none' ? 'bg-slate-700 text-slate-100 border-slate-500' : 'border-slate-800 text-slate-500',
+                doac: state.anticoagulant === 'doac' ? 'bg-rose-500/20 text-rose-400 border-rose-500/50' : 'border-slate-800 text-slate-500',
+                warfarin: state.anticoagulant === 'warfarin' ? 'bg-orange-500/20 text-orange-400 border-orange-500/50' : 'border-slate-800 text-slate-500'
+            };
+            document.getElementById('btn-ac-none').className = `flex-1 py-1.5 text-xs rounded border ${acClasses.none}`;
+            document.getElementById('btn-ac-doac').className = `flex-1 py-1.5 text-xs rounded border ${acClasses.doac}`;
+            document.getElementById('btn-ac-warfarin').className = `flex-1 py-1.5 text-xs rounded border ${acClasses.warfarin}`;
+
+            document.getElementById('btn-evt-pre').className = `px-2 py-1 text-[10px] md:text-xs rounded whitespace-nowrap ${state.evtStatus === 'pre' ? 'bg-slate-700 text-cyan-400' : 'text-slate-500'}`;
+            document.getElementById('btn-evt-post-ivt').className = `px-2 py-1 text-[10px] md:text-xs rounded whitespace-nowrap ${state.evtStatus === 'post-ivt' ? 'bg-indigo-900/40 text-indigo-400' : 'text-slate-500'}`;
+            document.getElementById('btn-evt-post-success').className = `px-2 py-1 text-[10px] md:text-xs rounded whitespace-nowrap ${state.evtStatus === 'post-success' ? 'bg-emerald-900/30 text-emerald-400' : 'text-slate-500'}`;
+            document.getElementById('btn-evt-post-fail').className = `px-2 py-1 text-[10px] md:text-xs rounded whitespace-nowrap ${state.evtStatus === 'post-fail' ? 'bg-amber-900/30 text-amber-400' : 'text-slate-500'}`;
+
+            document.getElementById('check-contra').checked = state.hasContra;
+
+            const bpBadge = document.getElementById('bp-target-badge');
+            bpBadge.innerText = `目标: ${result.bpTarget.label}`;
+            let badgeClass = 'bg-slate-800 text-slate-400 border-slate-700';
+            if (result.bpTarget.type === 'ivt') badgeClass = 'bg-cyan-900/30 text-cyan-400 border-cyan-800';
+            else if (result.bpTarget.type === 'ivt-post') badgeClass = 'bg-rose-900/30 text-rose-400 border-rose-800 shadow-md shadow-rose-900/50'; 
+            else if (result.bpTarget.type === 'strict') badgeClass = 'bg-emerald-900/30 text-emerald-400 border-emerald-800';
+            bpBadge.className = `text-[10px] px-2 py-0.5 rounded border transition-colors ${badgeClass}`;
+            
+            document.getElementById('lbl-sys-target').innerText = `<${result.bpTarget.sys}`;
+            document.getElementById('lbl-dia-target').innerText = `<${result.bpTarget.dia}`;
+            
+            const bpSysInput = document.getElementById('input-bpsys');
+            bpSysInput.className = `w-full bg-slate-950 border rounded-md px-3 py-2 text-lg focus:outline-none font-mono ${state.bpSys >= result.bpTarget.sys ? 'border-rose-500/80 text-rose-400 shadow-[0_0_8px_rgba(244,63,94,0.3)]' : 'border-slate-700 focus:border-cyan-500 text-slate-100'}`;
+            
+            const bpDiaInput = document.getElementById('input-bpdia');
+            bpDiaInput.className = `w-full bg-slate-950 border rounded-md px-3 py-2 text-lg focus:outline-none font-mono ${state.bpDia >= result.bpTarget.dia ? 'border-rose-500/80 text-rose-400 shadow-[0_0_8px_rgba(244,63,94,0.3)]' : 'border-slate-700 focus:border-cyan-500 text-slate-100'}`;
+
+            const labsContainer = document.getElementById('labs-container');
+            const labsIcon = document.getElementById('icon-labs-chevron');
+            if (state.showLabs) {
+                labsContainer.classList.remove('hidden');
+                labsIcon.setAttribute('data-lucide', 'chevron-up');
+            } else {
+                labsContainer.classList.add('hidden');
+                labsIcon.setAttribute('data-lucide', 'chevron-down');
+            }
+            document.getElementById('input-plt').className = `w-full bg-slate-900 border rounded px-1 py-1 text-center text-xs focus:outline-none font-mono ${state.plt < 100 ? 'border-rose-500/50 text-rose-400' : 'border-slate-700'}`;
+            document.getElementById('input-inr').className = `w-full bg-slate-900 border rounded px-1 py-1 text-center text-xs focus:outline-none font-mono ${state.inr > 1.7 ? 'border-rose-500/50 text-rose-400' : 'border-slate-700'}`;
+            document.getElementById('input-aptt').className = `w-full bg-slate-900 border rounded px-1 py-1 text-center text-xs focus:outline-none font-mono ${state.aptt > 40 ? 'border-rose-500/50 text-rose-400' : 'border-slate-700'}`;
+
+            const planContainer = document.getElementById('action-plan-container');
+            planContainer.innerHTML = result.planSteps.map(step => `
+                <div class="flex items-start gap-3 p-3 rounded-xl border ${step.borderColor} transition-all duration-300">
+                    <div class="p-1.5 rounded-lg bg-slate-950 shadow-inner flex-shrink-0 ${step.iconColor}">
+                        <i data-lucide="${step.icon}" class="w-5 h-5"></i>
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="font-semibold mb-1 text-sm ${step.titleColor}">${step.title}</h3>
+                        <div class="text-xs leading-relaxed text-slate-300">${step.desc}</div>
+                    </div>
+                </div>
+            `).join('');
+            
+            lucide.createIcons({ root: planContainer });
+            lucide.createIcons({ root: document.getElementById('btn-toggle-labs') });
+
+            if (state.lvoStatus === 'yes' && state.circLocation === 'anterior') {
+                const scoreEl = document.getElementById('aspects-score');
+                scoreEl.innerText = result.aspectsScore;
+                scoreEl.className = result.aspectsScore >= 6 ? 'text-emerald-400' : 'text-rose-500 drop-shadow-[0_0_8px_rgba(244,63,94,0.5)] transition-all';
+                
+                Object.keys(state.aspects).forEach(region => {
+                    const pathEl = document.getElementById(`path-${region}`);
+                    if (pathEl) {
+                        const colorPrefix = aspectsColors[region];
+                        if (state.aspects[region]) {
+                            pathEl.setAttribute('class', `cursor-pointer transition-colors duration-300 hover:opacity-80 stroke-slate-900 stroke-[0.5] fill-${colorPrefix}/20`);
+                        } else {
+                            pathEl.setAttribute('class', `cursor-pointer transition-colors duration-300 hover:opacity-80 stroke-slate-900 stroke-[0.5] fill-rose-500/80`);
+                        }
+                    }
+                });
+            }
+            
+            document.getElementById('input-age').value = state.age;
+        }
+
+        // --- 事件监听与状态变更器 ---
+        function setState(key, value) {
+            if (key === 'anticoagulant' && (value === 'doac' || value === 'warfarin')) {
+                state.showLabs = true; 
+            }
+            state[key] = value;
+            render();
+        }
+
+        // 【UI交互优化】：步进器增减函数
+        function adjustScore(type, delta) {
+            if (type === 'nihss') {
+                let val = Math.max(0, Math.min(42, state.nihss + delta));
+                setState('nihss', val);
+            } else if (type === 'mrs') {
+                let val = Math.max(0, Math.min(5, state.mrs + delta));
+                setState('mrs', val);
+            }
+        }
+
+        function toggleAspect(region) {
+            state.aspects[region] = !state.aspects[region];
+            render();
+        }
+
+        function resetAspects() {
+            Object.keys(state.aspects).forEach(key => state.aspects[key] = true);
+            render();
+        }
+
+        function toggleContra() {
+            state.hasContra = !state.hasContra;
+            render();
+        }
+
+        function resetAll() {
+            state = JSON.parse(JSON.stringify(defaultState));
+            document.getElementById('input-weight').value = defaultState.weight;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            render();
+        }
+
+        // 【终极痛点优化】：一键生成交班并复制到剪贴板
+        function copyHandoverReport() {
+            const result = evaluateLogic();
+            let lvoStr = "未出结果";
+            if(state.lvoStatus === 'yes') {
+                lvoStr = state.circLocation === 'anterior' ? `证实前循环大血管闭塞(ASPECTS ${result.aspectsScore}分)` : `证实后循环大血管闭塞(BAO)`;
+            } else if (state.lvoStatus === 'no') {
+                lvoStr = "排除大血管闭塞";
+            }
+
+            let text = `【卒中绿通交班/评估报告】\n`;
+            text += `▶ 患者信息：${state.age}岁，体重 ${state.weight}kg。\n`;
+            text += `▶ 发病时间：${state.isWakeUpStroke ? '醒后卒中/发病时间不明' : '最后正常时间(LKW) ' + state.timeOnset + 'h'}。\n`;
+            text += `▶ 体征评分：NIHSS ${state.nihss}分，发病前mRS ${state.mrs}分。\n`;
+            text += `▶ 生命体征：血压 ${state.bpSys}/${state.bpDia} mmHg，随机血糖 ${state.glucose} mmol/L。\n`;
+            text += `▶ 既往病史：抗凝用药(${state.anticoagulant === 'none' ? '无' : state.anticoagulant.toUpperCase()})，绝对禁忌症(${state.hasContra ? '有' : '无'})。\n`;
+            text += `▶ 血管影像：${lvoStr}。\n`;
+            text += `\n【AI 决策建议】\n`;
+            
+            result.planSteps.forEach(step => {
+                // 正则剥离 HTML 标签，保证微信群纯文本阅读体验
+                let cleanDesc = step.desc.replace(/<\/?[^>]+(>|$)/g, " ").replace(/\s+/g, " ").trim();
+                text += `📌 ${step.title}\n   ${cleanDesc}\n`;
+            });
+
+            // 规避 iFrame 及移动端兼容性限制的 Clipboard 拷贝方案
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed"; 
+            textArea.style.left = "-9999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                const btnText = document.getElementById('btn-copy-text');
+                const originalText = btnText.innerText;
+                btnText.innerText = "已复制!";
+                setTimeout(() => btnText.innerText = originalText, 2000);
+            } catch (err) {
+                alert("复制失败，请重试或手动截图");
+            }
+            document.body.removeChild(textArea);
+        }
+
+        // 绑定输入事件
+        document.getElementById('input-time').addEventListener('input', (e) => setState('timeOnset', parseFloat(e.target.value)));
         
-        if (state.mrs >= 3) evt = { eligible: (timeToUse <= 24 && aspectsScore >= 3), message: `${baseEvtMessage} 【注意：患者发病前已存在中重度残疾(mRS ${state.mrs}分)，取栓临床净获益受限，请结合家属意愿谨慎决策。】` };
-        else evt = { eligible: (timeToUse <= 24 && aspectsScore >= 3), message: baseEvtMessage };
-    }
+        // 绑定步进器中间的输入框手动键入防呆事件
+        document.getElementById('input-nihss').addEventListener('blur', (e) => {
+            let val = Math.max(0, Math.min(42, Number(e.target.value)));
+            e.target.value = val;
+            setState('nihss', val);
+        });
+        document.getElementById('input-mrs').addEventListener('blur', (e) => {
+            let val = Math.max(0, Math.min(5, Number(e.target.value)));
+            e.target.value = val;
+            setState('mrs', val);
+        });
+        
+        document.getElementById('input-weight').addEventListener('input', (e) => setState('weight', Number(e.target.value)));
+        document.getElementById('input-weight').addEventListener('blur', (e) => {
+            let val = Number(e.target.value);
+            if(val < 30) { e.target.value = 30; setState('weight', 30); }
+            else if(val > 150) { e.target.value = 150; setState('weight', 150); }
+        });
 
-    // 构建行动清单 HTML
-    let planHtml = '';
-    
-    if (state.evtStatus !== 'pre') {
-        // 术后模式
-        if (state.evtStatus === 'post-success') {
-            if (state.bpSys < 140) {
-                planHtml += createStepHtml('alert-triangle', 'text-rose-500', 'border-rose-500/30 bg-rose-500/10', 'text-rose-400', '术后管理红色警告：停止强化降压', 'EVT术后已完全再通，请避免强化降压至收缩压 < 140 mmHg，可能导致穿支动脉灌注不足及神经功能恶化！');
-            } else {
-                planHtml += createStepHtml('check-circle', 'text-emerald-500', 'border-emerald-500/30 bg-emerald-500/5', 'text-emerald-400', '术后管理：生命体征平稳', '术后再通血压控制良好，建议维持在 < 180/105 mmHg。');
-            }
-        } else {
-             planHtml += createStepHtml('activity', 'text-amber-500', 'border-amber-500/30 bg-amber-500/10', 'text-amber-400', '术后管理：允许性高血压', 'EVT未再通：需维持适度较高血压，避免过度降压导致侧支代偿崩溃。');
-        }
-    } else {
-        // 术前抢救模式
-        // Step 1
-        if (state.glucose < 3.3) {
-             planHtml += createStepHtml('alert-triangle', 'text-rose-500', 'border-rose-500/40 bg-rose-500/10', 'text-rose-400', 'STEP 1: 紧急纠正低血糖 (Red Flag)', '当前血糖 < 3.3 mmol/L。需立即静推葡萄糖并重新评估，排除低血糖模拟脑卒中 (Stroke Mimic)。');
-        } else {
-            let bpSafeForIvt = state.bpSys <= 185 && state.bpDia <= 110;
-            if (!bpSafeForIvt && ivt.eligible) {
-                planHtml += createStepHtml('activity', 'text-rose-500', 'border-rose-500/40 bg-rose-500/10', 'text-rose-400', 'STEP 1: 紧急降压准备溶栓', `血压 ${state.bpSys}/${state.bpDia} mmHg 超出安全阈值。立即使用拉贝洛尔或尼卡地平降至 < 185/110 mmHg。`);
-            } else {
-                 planHtml += createStepHtml('check-circle', 'text-emerald-500', 'border-emerald-500/30 bg-emerald-500/5', 'text-emerald-400', 'STEP 1: 基础生命体征评估', `血压 ${state.bpSys}/${state.bpDia} mmHg，血糖 ${state.glucose} mmol/L。体征达标，进入后续评估。`);
-            }
-        }
+        document.getElementById('input-age').addEventListener('input', (e) => setState('age', Number(e.target.value)));
+        document.getElementById('input-glucose').addEventListener('input', (e) => setState('glucose', Number(e.target.value)));
+        document.getElementById('input-bpsys').addEventListener('input', (e) => setState('bpSys', Number(e.target.value)));
+        document.getElementById('input-bpdia').addEventListener('input', (e) => setState('bpDia', Number(e.target.value)));
 
-        // Step 2
-        let bpSafe = state.bpSys <= 185 && state.bpDia <= 110;
-        if (ivt.eligible) {
-            let ivtDesc = `
-                <div class="mt-2 text-slate-300">
-                    <span class="text-xs text-slate-400 bg-slate-900 px-2 py-1 rounded border border-slate-700">基于体重 ${state.weight} kg 计算的AI推荐剂量：</span>
-                    <ul class="list-disc pl-5 mt-3 space-y-2">
-                      <li><strong class="${bpSafe ? 'text-cyan-300' : ''}">首选：替奈普酶 (TNK) ${tnkDose} mg</strong>，单次静推 <span class="text-[10px] text-slate-500">(0.25mg/kg, max 25mg)</span></li>
-                      <li>备选：阿替普酶 (tPA) ${tpaTotal} mg，静推 <strong>${tpaBolus} mg</strong>，剩余 <strong>${tpaInfusion} mg</strong> 滴注60分钟。</li>
-                    </ul>
-                    ${state.isWakeUpStroke ? '<p class="mt-3 text-xs text-amber-500/80 bg-amber-500/10 p-2 rounded">⚠️ 醒后卒中：必须在 MRI DWI-FLAIR 或 CTP 提示有半暗带后，方可执行上述处方。</p>' : ''}
-                </div>`;
-             planHtml += createStepHtml('droplet', bpSafe ? 'text-cyan-400' : 'text-slate-500', bpSafe ? 'border-cyan-500/50 bg-cyan-900/20' : 'border-slate-700 dashed', bpSafe ? 'text-cyan-400' : 'text-slate-400', `STEP 2: 静脉溶栓 (IVT) 处方 ${!bpSafe ? ' — [等待血压达标]' : ''}`, ivtDesc);
-        } else {
-             planHtml += createStepHtml('shield-off', 'text-rose-500', 'border-rose-500/30 bg-rose-500/10', 'text-rose-400', 'STEP 2: 暂缓/禁忌静脉溶栓', `不符合溶栓指征：${ivt.shortReason}。`);
-        }
+        document.getElementById('input-plt').addEventListener('input', (e) => setState('plt', Number(e.target.value)));
+        document.getElementById('input-inr').addEventListener('input', (e) => setState('inr', Number(e.target.value)));
+        document.getElementById('input-aptt').addEventListener('input', (e) => setState('aptt', Number(e.target.value)));
 
-        // Step 3
-        if (evt.eligible) {
-             planHtml += createStepHtml('zap', 'text-indigo-400', 'border-indigo-500/40 bg-indigo-900/20', 'text-indigo-400', 'STEP 3: 血管内取栓 (EVT) 路径', `${evt.message} ${ivt.eligible && state.lvoStatus !== 'unknown' ? '建议溶栓与取栓桥接并行。' : '请立刻预警导管室评估动脉穿刺取栓。'}`);
-        } else {
-             planHtml += createStepHtml('cpu', 'text-slate-500', 'border-slate-800 bg-slate-900/50', 'text-slate-400', 'STEP 3: 血管内取栓评估', `${evt.message || `当前 ASPECTS (${aspectsScore}分) 提示暂无常规EVT指征。`}`);
-        }
+        document.getElementById('btn-wakeup').addEventListener('click', () => {
+            state.isWakeUpStroke = !state.isWakeUpStroke;
+            state.imagingMatched = false;
+            render();
+        });
+        document.getElementById('check-imaging-match').addEventListener('change', (e) => setState('imagingMatched', e.target.checked));
+        
+        document.getElementById('btn-circ-ant').addEventListener('click', () => setState('circLocation', 'anterior'));
+        document.getElementById('btn-circ-post').addEventListener('click', () => setState('circLocation', 'posterior'));
 
-        // Step 4
-        if (!ivt.eligible && !evt.eligible) {
-             let planBDesc = state.nihss <= 5 ? '患者为轻型非致残性卒中且无再灌注指征。推荐发病24h内尽早启动双联抗血小板治疗 (DAPT: 阿司匹林+氯吡格雷 21天，或 阿司匹林+替格瑞洛 30天)，随后改为单抗。' : '患者不符合急诊再灌注血管开通条件。建议尽早(发病48h内)启动阿司匹林单抗治疗 (160-300mg/d)，密切监控脑水肿及并发症。';
-             planHtml += createStepHtml('list', 'text-purple-400', 'border-purple-500/40 bg-purple-900/20', 'text-purple-400', 'STEP 4: 早期强化内科与抗血小板治疗 (Plan B)', planBDesc);
-        }
-    }
-    
-    els.actionPlanContainer.innerHTML = planHtml;
-    feather.replace(); // 重新渲染新插入的图标
-}
+        document.getElementById('btn-toggle-labs').addEventListener('click', () => setState('showLabs', !state.showLabs));
 
-// --- 工具函数 ---
-function createStepHtml(iconName, iconColor, borderClass, titleColor, title, desc) {
-    return `
-    <div class="flex items-start gap-3 p-3 rounded-xl border ${borderClass}">
-        <div class="p-1.5 rounded-lg bg-slate-950 shadow-inner ${iconColor}"><i data-feather="${iconName}" class="w-5 h-5"></i></div>
-        <div class="flex-1">
-            <h3 class="font-semibold mb-1 text-sm ${titleColor}">${title}</h3>
-            <div class="text-xs leading-relaxed">${desc}</div>
-        </div>
-    </div>`;
-}
-
-function updateInputWarning(el, isWarning) {
-    if(isWarning) {
-        el.classList.add('border-rose-500/50', 'text-rose-300', 'focus:border-rose-500');
-        el.classList.remove('border-slate-700', 'focus:border-cyan-500', 'text-slate-100');
-    } else {
-        el.classList.remove('border-rose-500/50', 'text-rose-300', 'focus:border-rose-500');
-        el.classList.add('border-slate-700', 'focus:border-cyan-500', 'text-slate-100');
-    }
-}
-
-function updateButtonGroup(groupId, activeVal, colorClasses) {
-    const container = document.getElementById(groupId);
-    const buttons = container.querySelectorAll('button');
-    buttons.forEach(btn => {
-        const val = btn.getAttribute('data-val');
-        btn.className = `flex-1 py-1.5 text-xs rounded border ${val === activeVal ? colorClasses[val] || colorClasses.active : colorClasses.inactive || 'border-slate-800 text-slate-500'}`;
-    });
-}
-
-// --- 事件监听绑定 ---
-
-// 醒后卒中开关
-els.btnWakeup.addEventListener('click', () => {
-    state.isWakeUpStroke = !state.isWakeUpStroke;
-    if(state.isWakeUpStroke) {
-        els.btnWakeup.className = "flex items-center gap-1.5 px-3 py-1 text-xs rounded-full transition-all border bg-indigo-500/20 text-indigo-300 border-indigo-500/50";
-        els.timeSliderContainer.classList.add('hidden');
-        els.timeWakeupMsg.classList.remove('hidden');
-    } else {
-        els.btnWakeup.className = "flex items-center gap-1.5 px-3 py-1 text-xs rounded-full transition-all border bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200";
-        els.timeSliderContainer.classList.remove('hidden');
-        els.timeWakeupMsg.classList.add('hidden');
-    }
-    calculateLogic();
-});
-
-// 滑块与基础输入
-els.timeSlider.addEventListener('input', (e) => { state.timeOnset = parseFloat(e.target.value); els.timeVal.innerText = state.timeOnset.toFixed(1); calculateLogic(); });
-els.nihssSlider.addEventListener('input', (e) => { state.nihss = parseInt(e.target.value); els.nihssVal.innerText = state.nihss; calculateLogic(); });
-els.mrsSlider.addEventListener('input', (e) => { 
-    state.mrs = parseInt(e.target.value); 
-    els.mrsVal.innerText = state.mrs; 
-    els.mrsVal.className = `text-lg font-bold font-mono ${state.mrs >= 3 ? 'text-rose-400' : 'text-emerald-400'}`;
-    calculateLogic(); 
-});
-els.weightInput.addEventListener('input', (e) => { state.weight = parseFloat(e.target.value); calculateLogic(); });
-els.glucoseInput.addEventListener('input', (e) => { state.glucose = parseFloat(e.target.value); calculateLogic(); });
-els.sysInput.addEventListener('input', (e) => { state.bpSys = parseFloat(e.target.value); calculateLogic(); });
-els.diaInput.addEventListener('input', (e) => { state.bpDia = parseFloat(e.target.value); calculateLogic(); });
-
-// 按钮组
-document.getElementById('group-lvo').addEventListener('click', (e) => {
-    if(e.target.tagName === 'BUTTON') {
-        state.lvoStatus = e.target.getAttribute('data-val');
-        updateButtonGroup('group-lvo', state.lvoStatus, { unknown: 'bg-slate-700 text-slate-100 border-slate-500', yes: 'bg-rose-900/40 text-rose-400 border-rose-500/50', no: 'bg-emerald-900/40 text-emerald-400 border-emerald-500/50' });
-        calculateLogic();
-    }
-});
-document.getElementById('group-acoag').addEventListener('click', (e) => {
-    if(e.target.tagName === 'BUTTON') {
-        state.anticoagulant = e.target.getAttribute('data-val');
-        updateButtonGroup('group-acoag', state.anticoagulant, { none: 'bg-slate-700 text-slate-100 border-slate-500', doac: 'bg-rose-500/20 text-rose-400 border-rose-500/50', warfarin: 'bg-orange-500/20 text-orange-400 border-orange-500/50' });
-        calculateLogic();
-    }
-});
-document.getElementById('group-evtstatus').addEventListener('click', (e) => {
-    if(e.target.tagName === 'BUTTON') {
-        state.evtStatus = e.target.getAttribute('data-val');
-        const container = document.getElementById('group-evtstatus');
-        const buttons = container.querySelectorAll('button');
-        buttons.forEach(btn => btn.className = 'px-2 py-1 text-[10px] md:text-xs rounded text-slate-500');
-        if(state.evtStatus === 'pre') e.target.className = 'px-2 py-1 text-[10px] md:text-xs rounded bg-slate-700 text-cyan-400';
-        else if(state.evtStatus === 'post-success') e.target.className = 'px-2 py-1 text-[10px] md:text-xs rounded bg-emerald-900/30 text-emerald-400';
-        else if(state.evtStatus === 'post-fail') e.target.className = 'px-2 py-1 text-[10px] md:text-xs rounded bg-amber-900/30 text-amber-400';
-        calculateLogic();
-    }
-});
-
-// 复选框
-els.checkContra.addEventListener('change', (e) => { state.hasContra = e.target.checked; calculateLogic(); });
-
-// 实验室化验展开与输入
-els.btnToggleLabs.addEventListener('click', () => {
-    state.showLabs = !state.showLabs;
-    if(state.showLabs) {
-        els.panelLabs.classList.remove('hidden'); els.panelLabs.classList.add('grid');
-        els.iconLabArrow.setAttribute('data-feather', 'chevron-up');
-    } else {
-        els.panelLabs.classList.add('hidden'); els.panelLabs.classList.remove('grid');
-        els.iconLabArrow.setAttribute('data-feather', 'chevron-down');
-    }
-    feather.replace(); calculateLogic();
-});
-els.pltInput.addEventListener('input', (e) => { state.plt = parseFloat(e.target.value); calculateLogic(); });
-els.inrInput.addEventListener('input', (e) => { state.inr = parseFloat(e.target.value); calculateLogic(); });
-els.apttInput.addEventListener('input', (e) => { state.aptt = parseFloat(e.target.value); calculateLogic(); });
-
-// ASPECTS 交互
-document.querySelectorAll('.region-path').forEach(path => {
-    path.addEventListener('click', (e) => {
-        const id = e.target.id.replace('reg-', '');
-        state.aspects[id] = !state.aspects[id];
-        // 更新颜色
-        if(state.aspects[id]) {
-            e.target.setAttribute('class', `region-path ${aspectsConfig[id]}`);
-        } else {
-            e.target.setAttribute('class', `region-path fill-rose-500/80`);
-        }
-        calculateLogic();
-    });
-});
-els.btnResetAspects.addEventListener('click', () => {
-    Object.keys(state.aspects).forEach(key => { state.aspects[key] = true; });
-    document.querySelectorAll('.region-path').forEach(path => {
-        const id = path.id.replace('reg-', '');
-        path.setAttribute('class', `region-path ${aspectsConfig[id]}`);
-    });
-    calculateLogic();
-});
-
-// 初始化
-calculateLogic();
-
-</script>
+        render();
+    </script>
 </body>
 </html>
