@@ -32,7 +32,7 @@
                 <i data-lucide="shield-check" class="w-4 h-4"></i>
                 多重医疗安全锁防护
             </div>
-            <!-- 【终极痛点解决】：一键生成并复制交班报告 -->
+            <!-- 一键生成并复制交班报告 -->
             <button onclick="copyHandoverReport()" class="flex items-center gap-2 text-sm text-emerald-100 bg-emerald-600 hover:bg-emerald-500 transition-colors px-4 py-2 rounded-lg font-semibold shadow-lg shadow-emerald-500/20">
                 <i data-lucide="clipboard-copy" class="w-4 h-4"></i>
                 <span id="btn-copy-text">复制交班</span>
@@ -147,7 +147,6 @@
                 <!-- 时间与影像确认模块 -->
                 <div class="bg-slate-950/50 p-4 rounded-xl border border-slate-800 mb-5 relative">
                     <div class="flex justify-between items-center mb-3">
-                        <!-- 【避险优化】：修改语义为 LKW -->
                         <label class="text-sm text-slate-300 flex items-center gap-2">
                             <i data-lucide="clock" class="w-4 h-4 text-cyan-500"></i> 最后正常时间 (LKW)
                         </label>
@@ -186,8 +185,7 @@
                     </div>
                 </div>
 
-                <!-- 神经功能评分 -->
-                <!-- 【UX优化】：废弃滑块，改为步进器 (Stepper) 确保极端精准 -->
+                <!-- 神经功能评分步进器 -->
                 <div class="grid grid-cols-2 gap-4 mb-5">
                     <div class="bg-slate-950/50 p-3 rounded-xl border border-slate-800">
                         <div class="text-xs text-slate-400 mb-2 text-center">NIHSS (缺损程度)</div>
@@ -267,31 +265,40 @@
                             <button id="btn-ac-warfarin" onclick="setState('anticoagulant', 'warfarin')" class="flex-1 py-1.5 text-xs rounded border border-slate-800 text-slate-500">华法林</button>
                         </div>
                     </div>
+                </div>
 
-                    <!-- 绝对禁忌症悬浮提示备忘录 -->
-                    <div class="mt-3 flex items-center justify-between bg-rose-950/30 p-2.5 rounded border border-rose-900/50 relative group">
-                        <label class="text-xs text-rose-300 flex items-center gap-1.5 cursor-pointer" onclick="toggleContra()">
-                            <i data-lucide="shield-alert" class="w-4 h-4"></i> 存在绝对禁忌症
-                            <i data-lucide="help-circle" class="w-3 h-3 text-rose-400/70 hover:text-rose-300 cursor-help"></i>
-                        </label>
-                        <input type="checkbox" id="check-contra" class="w-4 h-4 accent-rose-500 cursor-pointer rounded border-slate-700 bg-slate-900"/>
-                        
-                        <div class="absolute bottom-full left-0 mb-2 hidden group-hover:block w-64 bg-slate-800 text-slate-200 text-[10px] p-3 rounded shadow-2xl border border-slate-700 z-50">
-                            <strong class="text-rose-400 block mb-1 border-b border-slate-700 pb-1">常见禁忌症备忘：</strong>
-                            <ul class="list-disc pl-4 space-y-1">
-                                <li>近3个月内有严重头颅创伤或卒中</li>
-                                <li>既往有蛛网膜下腔出血(SAH)史</li>
-                                <li>近期有颅内/椎管内手术史</li>
-                                <li>活动性内脏出血</li>
-                                <li>已知颅内肿瘤/动静脉畸形</li>
-                            </ul>
-                            <div class="absolute -bottom-1 left-6 w-2 h-2 bg-slate-800 border-b border-r border-slate-700 transform rotate-45"></div>
+                <!-- 【重大重构】：可选择的全量禁忌症筛查面板 -->
+                <div class="mt-5 pt-4 border-t border-slate-800">
+                    <button id="btn-toggle-contras" class="flex items-center justify-between w-full text-left text-slate-300 hover:text-rose-400 transition-colors group">
+                        <span class="flex items-center gap-2 text-sm font-semibold">
+                            <i data-lucide="shield-alert" class="w-4 h-4 text-rose-500"></i> 溶栓禁忌症筛查
+                        </span>
+                        <div class="flex items-center gap-2">
+                            <span id="badge-contra-warn" class="hidden text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/50">存在禁忌</span>
+                            <i id="icon-contras-chevron" data-lucide="chevron-down" class="w-4 h-4 text-slate-500"></i>
+                        </div>
+                    </button>
+                    
+                    <div id="contras-container" class="hidden mt-3 space-y-3">
+                        <!-- 绝对禁忌 -->
+                        <div class="bg-rose-950/20 border border-rose-900/50 rounded-lg p-3">
+                            <div class="text-xs text-rose-400 font-semibold mb-2 flex items-center gap-1"><i data-lucide="x-octagon" class="w-3 h-3"></i> 绝对禁忌 (熔断溶栓)</div>
+                            <div class="grid grid-cols-1 gap-2.5 text-[11px] text-slate-300" id="list-abs-contras">
+                                <!-- JS 动态注入 -->
+                            </div>
+                        </div>
+                        <!-- 相对禁忌 -->
+                        <div class="bg-amber-950/20 border border-amber-900/50 rounded-lg p-3">
+                            <div class="text-xs text-amber-400 font-semibold mb-2 flex items-center gap-1"><i data-lucide="alert-triangle" class="w-3 h-3"></i> 相对禁忌 (需权衡利弊)</div>
+                            <div class="grid grid-cols-1 gap-2.5 text-[11px] text-slate-300" id="list-rel-contras">
+                                <!-- JS 动态注入 -->
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- 自动/手动折叠：急查化验 -->
-                <div class="mt-5 pt-4 border-t border-slate-800">
+                <div class="mt-4 pt-4 border-t border-slate-800">
                     <button id="btn-toggle-labs" class="flex items-center justify-between w-full text-left text-slate-300 hover:text-cyan-400 transition-colors group">
                         <span class="flex items-center gap-2 text-sm font-semibold">
                             <i data-lucide="test-tube" class="w-4 h-4 text-purple-400"></i> 急查血液化验 (抗凝史强制展开)
@@ -314,6 +321,25 @@
     <script>
         lucide.createIcons();
 
+        // 禁忌症字典定义
+        const contraDict = {
+            abs: [
+                {id: 'abs_ich', label: '既往脑出血、蛛网膜下腔出血史'},
+                {id: 'abs_trauma', label: '近3个月内有严重头颅创伤或缺血性卒中'},
+                {id: 'abs_surg', label: '近期有颅内或椎管内手术史'},
+                {id: 'abs_bleed', label: '活动性内脏出血'},
+                {id: 'abs_tumor', label: '已知颅内肿瘤、动静脉畸形'},
+                {id: 'abs_aortic', label: '怀疑主动脉夹层或感染性心内膜炎'}
+            ],
+            rel: [
+                {id: 'rel_surg', label: '近14天内大手术或严重创伤'},
+                {id: 'rel_gi', label: '近21天内消化道/泌尿道出血'},
+                {id: 'rel_mi', label: '近3个月内急性心肌梗死'},
+                {id: 'rel_preg', label: '妊娠期'},
+                {id: 'rel_aneurysm', label: '未破裂且未处理的>10mm颅内动脉瘤'}
+            ]
+        };
+
         const defaultState = {
             timeOnset: 2.5,
             isWakeUpStroke: false,
@@ -328,14 +354,20 @@
             anticoagulant: 'none',
             lvoStatus: 'unknown',
             circLocation: 'anterior', 
-            hasContra: false,
             evtStatus: 'pre',         
             showLabs: false,
             plt: 200,
             inr: 1.0,
             aptt: 30,
+            showContras: false,
+            absContras: {}, // 动态生成
+            relContras: {}, // 动态生成
             aspects: { C: true, L: true, IC: true, I: true, M1: true, M2: true, M3: true, M4: true, M5: true, M6: true }
         };
+
+        // 初始化禁忌症 state
+        contraDict.abs.forEach(c => defaultState.absContras[c.id] = false);
+        contraDict.rel.forEach(c => defaultState.relContras[c.id] = false);
 
         let state = JSON.parse(JSON.stringify(defaultState));
 
@@ -352,7 +384,7 @@
             if (state.evtStatus === 'post-success') bpTarget = { sys: 140, dia: 90, type: 'strict', label: '再通维持 120-139' };
             else if (state.evtStatus === 'post-fail') bpTarget = { sys: 220, dia: 120, type: 'permissive', label: '未通允许性高压' };
             else if (state.evtStatus === 'post-ivt') bpTarget = { sys: 180, dia: 105, type: 'ivt-post', label: '溶栓后极严 <180/105' };
-            else if ((state.timeOnset <= 9 || state.isWakeUpStroke) && !state.hasContra && state.anticoagulant === 'none') bpTarget = { sys: 185, dia: 110, type: 'ivt', label: '溶栓靶标 <185/110' };
+            else if ((state.timeOnset <= 9 || state.isWakeUpStroke) && state.anticoagulant === 'none') bpTarget = { sys: 185, dia: 110, type: 'ivt', label: '溶栓靶标 <185/110' }; // 这里省略了绝对禁忌症对靶标的影响，因为禁忌本身就不能溶
 
             const safeWeight = Math.min(Math.max(state.weight, 30), 150); 
             const tnkDoseRaw = Math.min(safeWeight * 0.25, 25);
@@ -362,7 +394,7 @@
             const tpaBolus = (tpaTotalRaw * 0.1).toFixed(1);
             const tpaInfusion = (tpaTotalRaw * 0.9).toFixed(1);
 
-            let ivt = { eligible: false, shortReason: '', needsMatchUnlock: false };
+            let ivt = { eligible: false, shortReason: '', needsMatchUnlock: false, isRelWarning: false };
             let evt = { eligible: false, message: '', isMildWarning: false };
 
             let labWarning = '';
@@ -372,12 +404,17 @@
                 else if (state.aptt > 40) labWarning = `aPTT 延长 (${state.aptt}s)`;
             }
 
-            // 【重大修复】：精确界定影像学匹配触发条件，剔除 >9h 的死角
+            // 检查禁忌症状态
+            const activeAbsContras = contraDict.abs.filter(c => state.absContras[c.id]).map(c => c.label);
+            const activeRelContras = contraDict.rel.filter(c => state.relContras[c.id]).map(c => c.label);
+            const hasAbsContra = activeAbsContras.length > 0;
+            const hasRelContra = activeRelContras.length > 0;
+
             const needsImagingMatch = state.isWakeUpStroke || (state.timeOnset > 4.5 && state.timeOnset <= 9);
             
-            // 【逻辑补丁优化】：增加 DOAC 特异性逆转声明
-            if (state.hasContra) {
-                ivt = { eligible: false, shortReason: '存在临床绝对禁忌症' };
+            // --- IVT 评估 ---
+            if (hasAbsContra) {
+                ivt = { eligible: false, shortReason: `存在绝对禁忌症：${activeAbsContras.join('、')}` };
             } else if (labWarning) {
                 ivt = { eligible: false, shortReason: `危急化验禁忌: ${labWarning}` };
             } else if (state.anticoagulant === 'doac') {
@@ -385,23 +422,23 @@
             } else if (state.anticoagulant === 'warfarin') {
                 ivt = { eligible: false, shortReason: `近期有华法林用药史，除非 INR ≤ 1.7 或已使用逆转剂，否则禁忌溶栓。` };
             } else if (state.timeOnset > 9 && !state.isWakeUpStroke) {
-                // 【重大修复】：9h 绝对硬上限拦截 (Hard Stop)
                 ivt = { eligible: false, shortReason: `发病已达 ${state.timeOnset}h，超过静脉溶栓 9h 绝对硬上限，出血风险极高。` };
             } else if (needsImagingMatch) {
                 if (!state.imagingMatched) {
                     ivt = { eligible: false, shortReason: '等待影像学(CTP/MRI)证实半暗带以解锁处方', needsMatchUnlock: true };
                 } else {
-                    ivt = { eligible: true, shortReason: '影像证实存在半暗带，符合延长窗/醒后溶栓标准' };
+                    ivt = { eligible: true, shortReason: '影像证实存在半暗带，符合延长窗/醒后溶栓标准', isRelWarning: hasRelContra };
                 }
             } else {
                 if (state.timeOnset <= 4.5) {
-                    if (state.nihss <= 5) ivt = { eligible: true, shortReason: '符合时间窗 (低NIHSS需评估是否致残)' };
-                    else ivt = { eligible: true, shortReason: '符合标准发病时间窗 (≤4.5h)' };
+                    if (state.nihss <= 5) ivt = { eligible: true, shortReason: '符合时间窗 (低NIHSS需评估是否致残)', isRelWarning: hasRelContra };
+                    else ivt = { eligible: true, shortReason: '符合标准发病时间窗 (≤4.5h)', isRelWarning: hasRelContra };
                 } else {
                     ivt = { eligible: false, shortReason: '超出时间窗' };
                 }
             }
 
+            // --- EVT 评估 ---
             if (state.lvoStatus === 'no') {
                 evt = { eligible: false, message: '证实无大血管闭塞 (Non-LVO)，无取栓指征。' };
             } else if (state.lvoStatus === 'yes' && state.circLocation === 'posterior') {
@@ -439,7 +476,7 @@
                     if (state.bpSys >= 180 || state.bpDia >= 105) planSteps.push({ id: 'ivt-post-high', icon: 'alert-triangle', iconColor: 'text-rose-500', borderColor: 'border-rose-500/30 bg-rose-500/10', titleColor: 'text-rose-400', title: '溶栓后紧急警报：极高出血风险', desc: `指南要求溶栓后24h内严控在 <180/105 mmHg。立刻调整降压泵！`});
                     else planSteps.push({ id: 'ivt-post-safe', icon: 'check-circle', iconColor: 'text-cyan-400', borderColor: 'border-cyan-500/30 bg-cyan-900/10', titleColor: 'text-cyan-400', title: '溶栓后管理 (24h 严密监测)', desc: `维持 <180/105 mmHg，密切观察出血转化(sICH)体征。`});
                 }
-                return { planSteps, aspectsScore, bpTarget, needsImagingMatch, safeWeight };
+                return { planSteps, aspectsScore, bpTarget, needsImagingMatch, safeWeight, hasAbsContra, hasRelContra, activeAbsContras, activeRelContras };
             }
 
             let isGlucoseSafe = false;
@@ -464,6 +501,7 @@
             let ivtAgeWarn = (state.age > 80 && state.timeOnset > 3 && state.timeOnset <= 4.5) ? 
                 `<div class="mt-2 text-amber-400/90 text-xs bg-amber-900/20 p-2 rounded border border-amber-500/20">⚠️ <b>高龄警示</b>：>80岁且处于 3-4.5h 窗，出血转化风险相对增加，需充分结合家属意愿。</div>` : ``;
             let evtAgeWarn = (state.age > 80 && evt.eligible) ? ` 【⚠️高龄(>80岁)取栓预后不良风险增加，需谨慎评估净获益】` : ``;
+            let relContraWarn = ivt.isRelWarning ? `<div class="mt-2 text-amber-400/90 text-xs bg-amber-900/20 p-2 rounded border border-amber-500/20">⚠️ <b>相对禁忌提示</b>：患者存在相对禁忌症（${activeRelContras.join('、')}），请充分权衡溶栓获益与出血风险，并确保家属知情同意！</div>` : ``;
 
             let bpSafe = state.bpSys <= 185 && state.bpDia <= 110;
             if (ivt.needsMatchUnlock) {
@@ -473,17 +511,22 @@
                 planSteps.push({ id: 'ivt-locked-bp', icon: 'lock', iconColor: 'text-rose-400', borderColor: 'border-rose-500/40 bg-rose-900/20', titleColor: 'text-rose-400', title: `STEP 2: 静脉溶栓处方 [等待高血压强制解锁]`, 
                 desc: `<div class="mt-2 text-rose-200/80">当前血压未达标 (${state.bpSys}/${state.bpDia})。必须等待血压降至安全范围 (<strong>&lt;185/110 mmHg</strong>) 后解锁具体剂量，以防引起致命性脑出血！</div>`});
             } else if (ivt.eligible && bpSafe) {
+                let p_titleColor = ivt.isRelWarning ? 'text-amber-400' : 'text-cyan-400';
+                let p_borderColor = ivt.isRelWarning ? 'border-amber-500/50 bg-amber-900/10' : 'border-cyan-500/50 bg-cyan-900/20';
+
                 let descHtml = `
                     <div class="mt-2 text-slate-300">
-                        <span class="text-xs text-slate-400 bg-slate-900 px-2 py-1 rounded border border-slate-700">按照 ${safeWeight} kg 安全计算剂量：</span>
-                        <ul class="list-disc pl-5 mt-3 space-y-2">
-                            <li><strong class="text-cyan-300">首选：替奈普酶 (TNK) <span class="text-xl mx-1">${tnkDose}</span> mg</strong>，单次静推 <span class="text-[10px] text-slate-500">(极量25mg)</span></li>
+                        ${relContraWarn}
+                        <div class="mt-3 text-xs text-slate-400 bg-slate-900 px-2 py-1 rounded border border-slate-700">按照 ${safeWeight} kg 安全计算剂量：</div>
+                        <ul class="list-disc pl-5 mt-2 space-y-2">
+                            <li><strong class="${ivt.isRelWarning ? 'text-amber-300' : 'text-cyan-300'}">首选：替奈普酶 (TNK) <span class="text-xl mx-1">${tnkDose}</span> mg</strong>，单次静推 <span class="text-[10px] text-slate-500">(极量25mg)</span></li>
                             <li>备选：阿替普酶 (tPA) ${tpaTotal} mg，静推 <strong>${tpaBolus} mg</strong>，剩余 <strong>${tpaInfusion} mg</strong> 滴注。</li>
+                            <li><span class="text-slate-400">本土备选：尿激酶 (UK) 100万-150万 IU</span>，静脉滴注 30 分钟。</li>
                         </ul>
                         ${ivtAgeWarn}
                     </div>
                 `;
-                planSteps.push({ id: 'ivt-go', icon: 'syringe', iconColor: 'text-cyan-400', borderColor: 'border-cyan-500/50 bg-cyan-900/20', titleColor: 'text-cyan-400', title: `STEP 2: 静脉溶栓 (IVT) 处方`, desc: descHtml});
+                planSteps.push({ id: 'ivt-go', icon: ivt.isRelWarning ? 'alert-triangle' : 'syringe', iconColor: p_titleColor, borderColor: p_borderColor, titleColor: p_titleColor, title: `STEP 2: 静脉溶栓 (IVT) 处方`, desc: descHtml});
             } else {
                 planSteps.push({ id: 'ivt-no', icon: 'shield-alert', iconColor: 'text-rose-500', borderColor: 'border-rose-500/30 bg-rose-500/10', titleColor: 'text-rose-400', title: 'STEP 2: 暂缓/禁忌静脉溶栓', desc: `不符合溶栓指征：${ivt.shortReason}`});
             }
@@ -508,7 +551,32 @@
                 planSteps.push({ id: 'medical-mgmt', icon: 'activity-square', iconColor: 'text-purple-400', borderColor: 'border-purple-500/40 bg-purple-900/20', titleColor: 'text-purple-400', title: 'STEP 4: 早期内科与抗血小板治疗 (Plan B)', desc: daptDesc});
             }
 
-            return { planSteps, aspectsScore, bpTarget, needsImagingMatch, safeWeight };
+            return { planSteps, aspectsScore, bpTarget, needsImagingMatch, safeWeight, hasAbsContra, hasRelContra, activeAbsContras, activeRelContras };
+        }
+
+        // 动态注入禁忌症列表 HTML
+        function injectContrasHtml() {
+            const absList = document.getElementById('list-abs-contras');
+            absList.innerHTML = contraDict.abs.map(c => `
+                <label class="flex items-start gap-2 cursor-pointer group">
+                    <input type="checkbox" id="${c.id}" class="mt-0.5 w-3.5 h-3.5 accent-rose-500 rounded border-slate-700 bg-slate-900" onchange="setStateContra('abs', '${c.id}', this.checked)">
+                    <span class="group-hover:text-rose-300 transition-colors leading-tight">${c.label}</span>
+                </label>
+            `).join('');
+
+            const relList = document.getElementById('list-rel-contras');
+            relList.innerHTML = contraDict.rel.map(c => `
+                <label class="flex items-start gap-2 cursor-pointer group">
+                    <input type="checkbox" id="${c.id}" class="mt-0.5 w-3.5 h-3.5 accent-amber-500 rounded border-slate-700 bg-slate-900" onchange="setStateContra('rel', '${c.id}', this.checked)">
+                    <span class="group-hover:text-amber-300 transition-colors leading-tight">${c.label}</span>
+                </label>
+            `).join('');
+        }
+
+        function setStateContra(type, id, value) {
+            if (type === 'abs') state.absContras[id] = value;
+            if (type === 'rel') state.relContras[id] = value;
+            render();
         }
 
         // --- DOM 更新渲染引擎 ---
@@ -518,7 +586,6 @@
             document.getElementById('val-time').innerText = state.timeOnset.toFixed(1);
             document.getElementById('input-time').value = state.timeOnset;
             
-            // 同步 Stepper 的数值
             document.getElementById('input-nihss').value = state.nihss;
             document.getElementById('input-mrs').value = state.mrs;
             document.getElementById('input-mrs').className = `w-full bg-transparent text-center text-xl font-mono font-bold focus:outline-none ${state.mrs >= 3 ? 'text-rose-400' : 'text-emerald-400'}`;
@@ -599,7 +666,34 @@
             document.getElementById('btn-evt-post-success').className = `px-2 py-1 text-[10px] md:text-xs rounded whitespace-nowrap ${state.evtStatus === 'post-success' ? 'bg-emerald-900/30 text-emerald-400' : 'text-slate-500'}`;
             document.getElementById('btn-evt-post-fail').className = `px-2 py-1 text-[10px] md:text-xs rounded whitespace-nowrap ${state.evtStatus === 'post-fail' ? 'bg-amber-900/30 text-amber-400' : 'text-slate-500'}`;
 
-            document.getElementById('check-contra').checked = state.hasContra;
+            // 更新禁忌症相关 UI
+            const contrasContainer = document.getElementById('contras-container');
+            const contrasIcon = document.getElementById('icon-contras-chevron');
+            const contraBadge = document.getElementById('badge-contra-warn');
+            
+            if (state.showContras) {
+                contrasContainer.classList.remove('hidden');
+                contrasIcon.setAttribute('data-lucide', 'chevron-up');
+            } else {
+                contrasContainer.classList.add('hidden');
+                contrasIcon.setAttribute('data-lucide', 'chevron-down');
+            }
+
+            if (result.hasAbsContra) {
+                contraBadge.classList.remove('hidden');
+                contraBadge.className = "text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/50";
+                contraBadge.innerText = "存在绝对禁忌";
+            } else if (result.hasRelContra) {
+                contraBadge.classList.remove('hidden');
+                contraBadge.className = "text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/50";
+                contraBadge.innerText = "存在相对禁忌";
+            } else {
+                contraBadge.classList.add('hidden');
+            }
+
+            // 同步 Checkbox 状态
+            contraDict.abs.forEach(c => document.getElementById(c.id).checked = state.absContras[c.id]);
+            contraDict.rel.forEach(c => document.getElementById(c.id).checked = state.relContras[c.id]);
 
             const bpBadge = document.getElementById('bp-target-badge');
             bpBadge.innerText = `目标: ${result.bpTarget.label}`;
@@ -646,6 +740,7 @@
             
             lucide.createIcons({ root: planContainer });
             lucide.createIcons({ root: document.getElementById('btn-toggle-labs') });
+            lucide.createIcons({ root: document.getElementById('btn-toggle-contras') });
 
             if (state.lvoStatus === 'yes' && state.circLocation === 'anterior') {
                 const scoreEl = document.getElementById('aspects-score');
@@ -668,7 +763,6 @@
             document.getElementById('input-age').value = state.age;
         }
 
-        // --- 事件监听与状态变更器 ---
         function setState(key, value) {
             if (key === 'anticoagulant' && (value === 'doac' || value === 'warfarin')) {
                 state.showLabs = true; 
@@ -677,7 +771,6 @@
             render();
         }
 
-        // 【UI交互优化】：步进器增减函数
         function adjustScore(type, delta) {
             if (type === 'nihss') {
                 let val = Math.max(0, Math.min(42, state.nihss + delta));
@@ -698,11 +791,6 @@
             render();
         }
 
-        function toggleContra() {
-            state.hasContra = !state.hasContra;
-            render();
-        }
-
         function resetAll() {
             state = JSON.parse(JSON.stringify(defaultState));
             document.getElementById('input-weight').value = defaultState.weight;
@@ -710,7 +798,6 @@
             render();
         }
 
-        // 【终极痛点优化】：一键生成交班并复制到剪贴板
         function copyHandoverReport() {
             const result = evaluateLogic();
             let lvoStr = "未出结果";
@@ -720,22 +807,27 @@
                 lvoStr = "排除大血管闭塞";
             }
 
+            let contraStr = "无";
+            if (result.hasAbsContra) {
+                contraStr = `【绝对禁忌】${result.activeAbsContras.join('、')}`;
+            } else if (result.hasRelContra) {
+                contraStr = `【相对禁忌】${result.activeRelContras.join('、')}`;
+            }
+
             let text = `【卒中绿通交班/评估报告】\n`;
             text += `▶ 患者信息：${state.age}岁，体重 ${state.weight}kg。\n`;
             text += `▶ 发病时间：${state.isWakeUpStroke ? '醒后卒中/发病时间不明' : '最后正常时间(LKW) ' + state.timeOnset + 'h'}。\n`;
             text += `▶ 体征评分：NIHSS ${state.nihss}分，发病前mRS ${state.mrs}分。\n`;
             text += `▶ 生命体征：血压 ${state.bpSys}/${state.bpDia} mmHg，随机血糖 ${state.glucose} mmol/L。\n`;
-            text += `▶ 既往病史：抗凝用药(${state.anticoagulant === 'none' ? '无' : state.anticoagulant.toUpperCase()})，绝对禁忌症(${state.hasContra ? '有' : '无'})。\n`;
+            text += `▶ 既往病史：抗凝用药(${state.anticoagulant === 'none' ? '无' : state.anticoagulant.toUpperCase()})，特殊禁忌(${contraStr})。\n`;
             text += `▶ 血管影像：${lvoStr}。\n`;
             text += `\n【AI 决策建议】\n`;
             
             result.planSteps.forEach(step => {
-                // 正则剥离 HTML 标签，保证微信群纯文本阅读体验
                 let cleanDesc = step.desc.replace(/<\/?[^>]+(>|$)/g, " ").replace(/\s+/g, " ").trim();
                 text += `📌 ${step.title}\n   ${cleanDesc}\n`;
             });
 
-            // 规避 iFrame 及移动端兼容性限制的 Clipboard 拷贝方案
             const textArea = document.createElement("textarea");
             textArea.value = text;
             textArea.style.position = "fixed"; 
@@ -755,10 +847,11 @@
             document.body.removeChild(textArea);
         }
 
-        // 绑定输入事件
+        // 初始化HTML注入与事件绑定
+        injectContrasHtml();
+
         document.getElementById('input-time').addEventListener('input', (e) => setState('timeOnset', parseFloat(e.target.value)));
         
-        // 绑定步进器中间的输入框手动键入防呆事件
         document.getElementById('input-nihss').addEventListener('blur', (e) => {
             let val = Math.max(0, Math.min(42, Number(e.target.value)));
             e.target.value = val;
@@ -797,6 +890,7 @@
         document.getElementById('btn-circ-post').addEventListener('click', () => setState('circLocation', 'posterior'));
 
         document.getElementById('btn-toggle-labs').addEventListener('click', () => setState('showLabs', !state.showLabs));
+        document.getElementById('btn-toggle-contras').addEventListener('click', () => setState('showContras', !state.showContras));
 
         render();
     </script>
