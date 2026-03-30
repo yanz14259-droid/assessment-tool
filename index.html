@@ -15,6 +15,16 @@
         input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
         .blur-sm { filter: blur(4px); pointer-events: none; user-select: none; }
+
+        /* 新增：右侧数据刷新时的呼吸闪烁动画 */
+        @keyframes flash-update {
+            0% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0); transform: scale(1); border-color: rgb(51, 65, 85); }
+            30% { box-shadow: 0 0 15px 2px rgba(14, 165, 233, 0.4); transform: scale(1.005); border-color: rgba(14, 165, 233, 0.6); }
+            100% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0); transform: scale(1); border-color: rgb(51, 65, 85); }
+        }
+        .animate-update {
+            animation: flash-update 0.4s ease-out;
+        }
     </style>
 </head>
 <body class="min-h-screen bg-slate-950 text-slate-200 p-4 md:p-8 font-sans selection:bg-cyan-900">
@@ -50,7 +60,8 @@
         <!-- === 右侧：处方决策清单与 ASPECTS 评估 (7/12) === -->
         <div class="lg:col-span-7 flex flex-col gap-5 order-1 lg:order-2 lg:sticky lg:top-4 lg:self-start z-20">
             
-            <section class="bg-gradient-to-br from-slate-900 to-slate-950 rounded-2xl p-5 border border-slate-700 shadow-xl relative overflow-hidden flex-shrink-0">
+            <!-- 给这个容器加上 id 以便触发动画 -->
+            <section id="action-plan-wrapper" class="bg-gradient-to-br from-slate-900 to-slate-950 rounded-2xl p-5 border border-slate-700 shadow-xl relative overflow-hidden flex-shrink-0 transition-transform">
                 <div class="absolute right-0 top-0 w-64 h-64 bg-cyan-500/5 blur-[100px] rounded-full pointer-events-none"></div>
                 <div class="flex justify-between items-center mb-5 relative z-10">
                     <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-100">
@@ -267,7 +278,7 @@
                     </div>
                 </div>
 
-                <!-- 【重大重构】：可选择的全量禁忌症筛查面板 -->
+                <!-- 可选择的全量禁忌症筛查面板 -->
                 <div class="mt-5 pt-4 border-t border-slate-800">
                     <button id="btn-toggle-contras" class="flex items-center justify-between w-full text-left text-slate-300 hover:text-rose-400 transition-colors group">
                         <span class="flex items-center gap-2 text-sm font-semibold">
@@ -360,8 +371,8 @@
             inr: 1.0,
             aptt: 30,
             showContras: false,
-            absContras: {}, // 动态生成
-            relContras: {}, // 动态生成
+            absContras: {},
+            relContras: {},
             aspects: { C: true, L: true, IC: true, I: true, M1: true, M2: true, M3: true, M4: true, M5: true, M6: true }
         };
 
@@ -377,6 +388,9 @@
             M4: 'cyan-400', M5: 'cyan-500', M6: 'cyan-600'
         };
 
+        // 节流处理渲染动画，避免过于频繁闪烁
+        let renderTimeout;
+
         function evaluateLogic() {
             const aspectsScore = Object.values(state.aspects).filter(Boolean).length;
             
@@ -384,7 +398,7 @@
             if (state.evtStatus === 'post-success') bpTarget = { sys: 140, dia: 90, type: 'strict', label: '再通维持 120-139' };
             else if (state.evtStatus === 'post-fail') bpTarget = { sys: 220, dia: 120, type: 'permissive', label: '未通允许性高压' };
             else if (state.evtStatus === 'post-ivt') bpTarget = { sys: 180, dia: 105, type: 'ivt-post', label: '溶栓后极严 <180/105' };
-            else if ((state.timeOnset <= 9 || state.isWakeUpStroke) && state.anticoagulant === 'none') bpTarget = { sys: 185, dia: 110, type: 'ivt', label: '溶栓靶标 <185/110' }; // 这里省略了绝对禁忌症对靶标的影响，因为禁忌本身就不能溶
+            else if ((state.timeOnset <= 9 || state.isWakeUpStroke) && state.anticoagulant === 'none') bpTarget = { sys: 185, dia: 110, type: 'ivt', label: '溶栓靶标 <185/110' };
 
             const safeWeight = Math.min(Math.max(state.weight, 30), 150); 
             const tnkDoseRaw = Math.min(safeWeight * 0.25, 25);
@@ -480,9 +494,10 @@
             }
 
             let isGlucoseSafe = false;
+            // 【重要逻辑修复】：>= 22.2 触发严重高血糖警告
             if (state.glucose < 3.3) {
                 planSteps.push({ id: 'glu-low', icon: 'alert-triangle', iconColor: 'text-rose-500', borderColor: 'border-rose-500/40 bg-rose-500/10', titleColor: 'text-rose-400', title: 'STEP 1: 紧急纠正低血糖 (Red Flag)', desc: '血糖 < 3.3 mmol/L。需立即静推葡萄糖，排除低血糖模拟脑卒中。'});
-            } else if (state.glucose > 22.2) {
+            } else if (state.glucose >= 22.2) {
                 planSteps.push({ id: 'glu-high', icon: 'alert-circle', iconColor: 'text-amber-500', borderColor: 'border-amber-500/40 bg-amber-500/10', titleColor: 'text-amber-400', title: 'STEP 1: 严重高血糖警报 (Hyperglycemia)', desc: `血糖高达 ${state.glucose} mmol/L。建议使用胰岛素将其控制在 7.8-10.0 mmol/L 之间，并高度警惕高血糖模拟卒中可能。`});
                 isGlucoseSafe = true; 
             } else {
@@ -493,7 +508,7 @@
                 let bpSafeForIvt = state.bpSys <= 185 && state.bpDia <= 110;
                 if (!bpSafeForIvt && (ivt.eligible || ivt.needsMatchUnlock)) {
                     planSteps.push({ id: 'bp-high', icon: 'activity', iconColor: 'text-rose-500', borderColor: 'border-rose-500/40 bg-rose-500/10', titleColor: 'text-rose-400', title: 'STEP 1: 紧急降压准备溶栓', desc: `血压超出安全阈值。立即使用静脉降压药降至 < 185/110 mmHg。`});
-                } else if (state.glucose <= 22.2) {
+                } else if (state.glucose < 22.2) {
                     planSteps.push({ id: 'bp-safe', icon: 'check-circle', iconColor: 'text-emerald-500', borderColor: 'border-emerald-500/30 bg-emerald-500/5', titleColor: 'text-emerald-400', title: 'STEP 1: 基础生命体征评估', desc: `生命体征及生化指标基本达标，进入再灌注评估。`});
                 }
             }
@@ -514,13 +529,14 @@
                 let p_titleColor = ivt.isRelWarning ? 'text-amber-400' : 'text-cyan-400';
                 let p_borderColor = ivt.isRelWarning ? 'border-amber-500/50 bg-amber-900/10' : 'border-cyan-500/50 bg-cyan-900/20';
 
+                // 【学术细节补充】：明确标注 mg/kg 等准确剂量指引
                 let descHtml = `
                     <div class="mt-2 text-slate-300">
                         ${relContraWarn}
                         <div class="mt-3 text-xs text-slate-400 bg-slate-900 px-2 py-1 rounded border border-slate-700">按照 ${safeWeight} kg 安全计算剂量：</div>
                         <ul class="list-disc pl-5 mt-2 space-y-2">
-                            <li><strong class="${ivt.isRelWarning ? 'text-amber-300' : 'text-cyan-300'}">首选：替奈普酶 (TNK) <span class="text-xl mx-1">${tnkDose}</span> mg</strong>，单次静推 <span class="text-[10px] text-slate-500">(极量25mg)</span></li>
-                            <li>备选：阿替普酶 (tPA) ${tpaTotal} mg，静推 <strong>${tpaBolus} mg</strong>，剩余 <strong>${tpaInfusion} mg</strong> 滴注。</li>
+                            <li><strong class="${ivt.isRelWarning ? 'text-amber-300' : 'text-cyan-300'}">首选：替奈普酶 (TNK) <span class="text-xl mx-1">${tnkDose}</span> mg</strong>，单次静推 <span class="text-[10px] text-slate-500">(0.25 mg/kg，极量 25mg)</span></li>
+                            <li>备选：阿替普酶 (tPA) ${tpaTotal} mg <span class="text-[10px] text-slate-500">(0.9 mg/kg，极量 90mg)</span>，静推 <strong>${tpaBolus} mg</strong>，剩余 <strong>${tpaInfusion} mg</strong> 滴注。</li>
                             <li><span class="text-slate-400">本土备选：尿激酶 (UK) 100万-150万 IU</span>，静脉滴注 30 分钟。</li>
                         </ul>
                         ${ivtAgeWarn}
@@ -691,10 +707,6 @@
                 contraBadge.classList.add('hidden');
             }
 
-            // 同步 Checkbox 状态
-            contraDict.abs.forEach(c => document.getElementById(c.id).checked = state.absContras[c.id]);
-            contraDict.rel.forEach(c => document.getElementById(c.id).checked = state.relContras[c.id]);
-
             const bpBadge = document.getElementById('bp-target-badge');
             bpBadge.innerText = `目标: ${result.bpTarget.label}`;
             let badgeClass = 'bg-slate-800 text-slate-400 border-slate-700';
@@ -738,6 +750,12 @@
                 </div>
             `).join('');
             
+            // 【UI细节优化】：触发“已更新”的视觉闪烁特效
+            const wrapper = document.getElementById('action-plan-wrapper');
+            wrapper.classList.remove('animate-update');
+            void wrapper.offsetWidth; // 触发重绘重排
+            wrapper.classList.add('animate-update');
+
             lucide.createIcons({ root: planContainer });
             lucide.createIcons({ root: document.getElementById('btn-toggle-labs') });
             lucide.createIcons({ root: document.getElementById('btn-toggle-contras') });
@@ -768,6 +786,8 @@
                 state.showLabs = true; 
             }
             state[key] = value;
+            
+            // 节流渲染以防卡顿，不过原生JS足够快，这里直接渲染即可
             render();
         }
 
